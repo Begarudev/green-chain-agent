@@ -1,0 +1,5 @@
+.env
+.env.local
+.env.local.example
+.env.example
+.env.local.example
