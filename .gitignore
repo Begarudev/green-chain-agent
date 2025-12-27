@@ -80,3 +80,5 @@ htmlcov/
 # Logs
 *.log
 logs/
+
+DEMO_SCRIPT.md
