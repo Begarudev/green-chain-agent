@@ -1,303 +1,360 @@
 """
 Streamlit frontend for the 🌱 GreenChain: AI Sustainable Finance Agent.
-
-Dashboards:
-- Sidebar: coordinates + controls
-- Three main columns: Map, Satellite NDVI, AI Loan Decision
+Refactored for Clean UX/UI and Robust State Management.
 """
 
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict
 
 import pandas as pd
 import streamlit as st
-from dotenv import load_dotenv
 import folium
 from streamlit_folium import st_folium
+from dotenv import load_dotenv
 
 # ---------------------------------------------------------------------------
-# Python path setup so we can import from backend/src
+# Path Setup
 # ---------------------------------------------------------------------------
 ROOT_DIR = Path(__file__).resolve().parent
 BACKEND_SRC = ROOT_DIR / "backend" / "src"
 if str(BACKEND_SRC) not in sys.path:
     sys.path.insert(0, str(BACKEND_SRC))
 
-# Load environment variables from .env.local at project root (if present)
+# Load Env
 env_path = ROOT_DIR / ".env.local"
 if env_path.exists():
     load_dotenv(env_path)
 else:
-    # Fallback to default .env if someone prefers that name
     load_dotenv()
 
-import services.satellite_service as satellite_service  # type: ignore
-from services.llm_service import analyze_loan_risk  # type: ignore
-from services.verification_service import (  # type: ignore
-    create_green_certificate,
-    generate_blockchain_hash,
-)
-
-
-def run_analysis(latitude: float, longitude: float, user_request: str | None) -> Dict[str, Any]:
-    """Run the full pipeline: satellite NDVI + LLM loan analysis."""
-    farm_data = satellite_service.get_farm_ndvi(latitude, longitude)
-    llm_result = analyze_loan_risk(farm_data, user_request=user_request)
-
-    return {
-        "farm_data": farm_data,
-        "llm_result": llm_result,
-    }
-
-
-def render_status_badge(status: str) -> None:
-    """Render a colored badge for vegetation status."""
-    status_lower = status.lower()
-    if "healthy" in status_lower or "excellent" in status_lower or "good" in status_lower:
-        color = "#16a34a"  # green-600
-    elif "warning" in status_lower or "stressed" in status_lower:
-        color = "#f97316"  # orange-500
-    else:
-        color = "#dc2626"  # red-600
-
-    st.markdown(
-        f"""
-        <span style="
-            display:inline-block;
-            padding:0.25rem 0.6rem;
-            border-radius:999px;
-            background-color:{color}1A;
-            color:{color};
-            font-weight:600;
-            font-size:0.9rem;
-        ">{status}</span>
-        """,
-        unsafe_allow_html=True,
+# Service Imports
+try:
+    import services.satellite_service as satellite_service
+    import services.weather_service as weather_service
+    from services import llm_service
+    from services.verification_service import (
+        create_green_certificate,
+        generate_blockchain_hash,
     )
+    from agents.multi_agent_system import process_loan_with_agents
+    MULTI_AGENT_AVAILABLE = True
+except ImportError as e:
+    st.error(f"Backend Import Error: {e}. Make sure you are running from the root directory.")
+    MULTI_AGENT_AVAILABLE = False
+    st.stop()
 
 
-def main() -> None:
+# ---------------------------------------------------------------------------
+# UI Configuration & CSS
+# ---------------------------------------------------------------------------
+def setup_page():
     st.set_page_config(
-        page_title="GreenChain Agent",
+        page_title="GreenChain | AI Finance",
         page_icon="🌱",
         layout="wide",
+        initial_sidebar_state="expanded"
     )
 
-    st.title("🌱 GreenChain: AI Sustainable Finance Agent")
-    st.caption(
-        "Validate farm sustainability from satellite NDVI and AI credit analysis to power fair micro-loans."
-    )
+    # Modern CSS Injection
+    st.markdown("""
+        <style>
+        /* Import Google Font */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
-    # -----------------------------------------------------------------------
-    # Sidebar controls
-    # -----------------------------------------------------------------------
-    st.sidebar.header("Farm Configuration")
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
+        }
 
-    default_lat = 37.669
-    default_lon = -100.749
+        /* Hides Streamlit's default top padding */
+        .block-container {
+            padding-top: 2rem;
+        }
 
-    # Initialise coordinate state if not set
-    if "lat" not in st.session_state:
-        st.session_state.lat = default_lat
-    if "lon" not in st.session_state:
-        st.session_state.lon = default_lon
+        /* Custom Header Styling */
+        .hero-header {
+            color: #064e3b;
+            font-weight: 700;
+            font-size: 2.5rem;
+            margin-bottom: 0px;
+        }
+        .hero-subheader {
+            color: #6b7280;
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+        }
 
-    # Sidebar numeric inputs bound to session state
-    lat = st.sidebar.number_input(
-        "Latitude",
-        value=float(st.session_state.lat),
-        format="%.6f",
-        key="lat_input",
-    )
-    lon = st.sidebar.number_input(
-        "Longitude",
-        value=float(st.session_state.lon),
-        format="%.6f",
-        key="lon_input",
-    )
+        /* Metric Styling */
+        div[data-testid="stMetricValue"] {
+            font-size: 1.8rem;
+            color: #064e3b;
+        }
 
-    # Keep session state in sync with sidebar
-    st.session_state.lat = float(lat)
-    st.session_state.lon = float(lon)
+        /* Success/Error Callouts */
+        .stAlert {
+            border-radius: 8px;
+        }
+        
+        /* Remove anchor links next to headers */
+        .css-15zrgzn {display: none}
+        </style>
+    """, unsafe_allow_html=True)
 
-    mock_mode = st.sidebar.checkbox("Mock Mode (fast, no live satellite fetch)", value=False)
 
-    user_context = st.sidebar.text_area(
-        "Loan Purpose / Context (optional)",
-        value="Requesting a sustainable micro-loan to expand climate-resilient crops.",
-        height=80,
-    )
+# ---------------------------------------------------------------------------
+# Logic Functions
+# ---------------------------------------------------------------------------
+def run_analysis(lat: float, lon: float, context: str, use_multi_agent: bool = False) -> Dict[str, Any]:
+    """Orchestrates the backend services including satellite, weather, and LLM analysis."""
+    
+    # Multi-Agent Mode
+    if use_multi_agent and MULTI_AGENT_AVAILABLE:
+        return process_loan_with_agents(lat, lon, context)
+    
+    # Standard Mode
+    # Step 1: Fetch satellite data
+    farm_data = satellite_service.get_farm_ndvi(lat, lon)
+    
+    # If satellite fails, don't waste money on LLM
+    if farm_data.get("error") and "Simulated" not in farm_data.get("status", ""):
+        return {"farm_data": farm_data, "weather_data": None, "llm_result": None}
+    
+    # Step 2: Fetch weather data
+    weather_data = weather_service.get_weather_analysis(lat, lon)
+    
+    # Step 3: Combine data for LLM analysis
+    combined_data = {
+        **farm_data,
+        "weather": weather_data
+    }
+    
+    llm_result = llm_service.analyze_loan_risk(combined_data, user_request=context)
+    return {"farm_data": farm_data, "weather_data": weather_data, "llm_result": llm_result}
 
-    analyze_clicked = st.sidebar.button("🔍 Analyze Farm", type="primary", use_container_width=True)
 
-    # Allow toggling backend mock mode for hackathon speed
-    satellite_service.MOCK_MODE = bool(mock_mode)
+# ---------------------------------------------------------------------------
+# Main Application
+# ---------------------------------------------------------------------------
+def main():
+    setup_page()
 
-    # -----------------------------------------------------------------------
-    # Main layout
-    # -----------------------------------------------------------------------
-    col_map, col_satellite, col_ai = st.columns(3)
+    # --- Session State Initialization ---
+    if "lat" not in st.session_state: st.session_state.lat = 37.669
+    if "lon" not in st.session_state: st.session_state.lon = -100.749
+    if "analysis_result" not in st.session_state: st.session_state.analysis_result = None
 
-    # Pre-populate map with current lat/lon and allow picking from map
-    with col_map:
-        st.subheader("Farm Location")
-        enable_pick = st.checkbox(
-            "Pick location by clicking on the map",
-            value=True,
-            help="Click on the map to update the latitude/longitude used for analysis.",
-            key="pick_from_map",
-        )
+    # --- Header ---
+    st.markdown('<div class="hero-header">🌱 GreenChain Agent</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-subheader">AI-Powered Verification for Sustainable Micro-Loans</div>', unsafe_allow_html=True)
 
-        current_lat = float(st.session_state.lat)
-        current_lon = float(st.session_state.lon)
+    # --- Layout ---
+    col_sidebar, col_main = st.columns([1, 2.5], gap="large")
 
-        if enable_pick:
-            m = folium.Map(location=[current_lat, current_lon], zoom_start=7)
-            folium.Marker(
-                [current_lat, current_lon],
-                tooltip="Selected farm location",
-            ).add_to(m)
+    # --- SIDEBAR (Controls) ---
+    with col_sidebar:
+        with st.container(border=True):
+            st.subheader("📍 Farm Location")
+            
+            # Map Interactions - One way flow usually works best in Streamlit
+            new_lat = st.number_input("Latitude", value=st.session_state.lat, format="%.4f")
+            new_lon = st.number_input("Longitude", value=st.session_state.lon, format="%.4f")
+            
+            # Update state if inputs change
+            if new_lat != st.session_state.lat or new_lon != st.session_state.lon:
+                st.session_state.lat = new_lat
+                st.session_state.lon = new_lon
+                # Clear previous result if location changes
+                st.session_state.analysis_result = None 
 
-            map_data = st_folium(m, width="100%", height=350)
+            st.caption("Try: Kansas (37.669, -100.749) or India (29.605, 76.273)")
+        
+        with st.container(border=True):
+            st.subheader("⚙️ Configuration")
+            
+            # Multi-Agent Mode Toggle
+            use_multi_agent = st.toggle("🤖 Multi-Agent Mode", value=True, 
+                help="Use advanced multi-agent system with Field Scout, Risk Analyst, and Loan Officer agents")
+            
+            mock_mode = st.toggle("Mock Mode (Fast)", value=False)
+            satellite_service.MOCK_MODE = mock_mode
+            weather_service.MOCK_MODE = mock_mode
+            llm_mock_mode = st.toggle("Mock LLM (No API Key)", value=False)
+            llm_service.MOCK_MODE = llm_mock_mode
+            
+            loan_context = st.text_area("Loan Purpose", "Expansion of organic wheat farming using drip irrigation.")
+            
+            run_btn = st.button("🚀 Run Analysis", type="primary", use_container_width=True)
 
-            # When user clicks on the map, update coordinates
-            if map_data and map_data.get("last_clicked"):
-                clicked = map_data["last_clicked"]
-                st.session_state.lat = float(clicked["lat"])
-                st.session_state.lon = float(clicked["lng"])
-                current_lat = st.session_state.lat
-                current_lon = st.session_state.lon
+    # --- MAIN CONTENT ---
+    with col_main:
+        
+        # 1. THE MAP
+        # We put the map in an expander or top section
+        m = folium.Map(location=[st.session_state.lat, st.session_state.lon], zoom_start=14, tiles="OpenStreetMap")
+        folium.Marker(
+            [st.session_state.lat, st.session_state.lon], 
+            popup="Target Farm", 
+            icon=folium.Icon(color="green", icon="leaf")
+        ).add_to(m)
+        
+        # Display map
+        st_folium(m, height=300, width="100%", key="main_map")
 
-        # Simple overview map synced with current coordinates
-        df_map = pd.DataFrame({"lat": [current_lat], "lon": [current_lon]})
-        st.map(df_map, zoom=8)
-        st.caption("Click on the map or adjust coordinates in the sidebar to set the farm location.")
+        # 2. RUN LOGIC
+        if run_btn:
+            with st.status("🔍 Agent Active...", expanded=True) as status:
+                if use_multi_agent:
+                    st.write("🤖 **Multi-Agent System Activated**")
+                    st.write("🛰️ Field Scout Agent: Gathering satellite & weather data...")
+                    st.write("📊 Risk Analyst Agent: Computing risk scores...")
+                    st.write("🏦 Loan Officer Agent: Making decision...")
+                else:
+                    st.write("🛰️ Contacting Sentinel-2 Satellite Interface...")
+                    st.write("📸 Downloading Multispectral Imagery...")
+                    st.write("🌤️ Fetching Historical Weather Data...")
+                
+                time.sleep(0.5) # UI pacing
+                result = run_analysis(st.session_state.lat, st.session_state.lon, loan_context, use_multi_agent)
+                
+                if result["farm_data"].get("error") and "Simulated" not in result["farm_data"].get("status", ""):
+                    status.update(label="❌ Data Retrieval Failed", state="error")
+                    st.error(result["farm_data"]["error"])
+                else:
+                    if not use_multi_agent:
+                        st.write("🧠 Processing Risk Models (Gemini Pro)...")
+                    st.session_state.analysis_result = result
+                    st.session_state.used_multi_agent = use_multi_agent
+                    status.update(label="✅ Analysis Complete", state="complete")
 
-    # Ensure we use the latest coordinates (possibly updated from the map)
-    lat = float(st.session_state.lat)
-    lon = float(st.session_state.lon)
+        # 3. DISPLAY RESULTS
+        if st.session_state.analysis_result:
+            res = st.session_state.analysis_result
+            farm = res["farm_data"]
+            weather = res.get("weather_data", {})
+            llm = res["llm_result"]
+            
+            st.divider()
+            
+            # --- TOP METRICS ROW ---
+            m1, m2, m3, m4 = st.columns(4)
+            with m1:
+                st.metric("Vegetation Index (NDVI)", f"{farm.get('ndvi_score', 0):.2f}", delta="Target > 0.4")
+            with m2:
+                # Colorize Status
+                status_color = ":green" if "Healthy" in farm.get('status', '') else ":red"
+                st.metric("Vegetation Status", farm.get('status', 'Unknown'))
+            with m3:
+                # Weather risk
+                weather_risk = weather.get('weather_risk_score', 0) if weather else 0
+                st.metric("Weather Risk", f"{weather_risk:.0%}", delta=weather.get('weather_status', 'Unknown'))
+            with m4:
+                # Decision
+                decision = llm.get('decision', 'PENDING')
+                icon = "✅" if "APPROVED" in decision else "⚠️" if "CONDITIONAL" in decision else "❌"
+                st.metric("AI Recommendation", f"{icon} {decision}")
+            
+            # --- WEATHER DATA SECTION ---
+            if weather and not weather.get("error"):
+                st.subheader("🌤️ Climate Analysis")
+                w1, w2, w3, w4 = st.columns(4)
+                with w1:
+                    st.metric("Total Rainfall", f"{weather.get('rainfall_total_mm', 'N/A')} mm")
+                with w2:
+                    st.metric("Avg Temperature", f"{weather.get('temperature_avg_c', 'N/A')}°C")
+                with w3:
+                    st.metric("Drought Risk", f"{weather.get('drought_risk_score', 0):.0%}")
+                with w4:
+                    st.metric("Frost Days", weather.get('frost_days', 'N/A'))
+            
+            # --- MULTI-AGENT TRACE (if used) ---
+            if st.session_state.get("used_multi_agent") and res.get("agent_trace"):
+                st.subheader("🤖 Multi-Agent Workflow")
+                
+                # Agent trace visualization
+                agents_run = res.get("agent_trace", [])
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    agent_done = "field_scout" in agents_run
+                    st.markdown(f"""
+                    <div style="text-align: center; padding: 10px; background: {'#d4edda' if agent_done else '#f8f9fa'}; border-radius: 8px;">
+                        <div style="font-size: 2em;">🛰️</div>
+                        <div style="font-weight: bold;">Field Scout</div>
+                        <div style="color: {'green' if agent_done else 'gray'};">{'✓ Complete' if agent_done else '○ Pending'}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col2:
+                    agent_done = "risk_analyst" in agents_run
+                    st.markdown(f"""
+                    <div style="text-align: center; padding: 10px; background: {'#d4edda' if agent_done else '#f8f9fa'}; border-radius: 8px;">
+                        <div style="font-size: 2em;">📊</div>
+                        <div style="font-weight: bold;">Risk Analyst</div>
+                        <div style="color: {'green' if agent_done else 'gray'};">{'✓ Complete' if agent_done else '○ Pending'}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col3:
+                    agent_done = "loan_officer" in agents_run
+                    st.markdown(f"""
+                    <div style="text-align: center; padding: 10px; background: {'#d4edda' if agent_done else '#f8f9fa'}; border-radius: 8px;">
+                        <div style="font-size: 2em;">🏦</div>
+                        <div style="font-weight: bold;">Loan Officer</div>
+                        <div style="color: {'green' if agent_done else 'gray'};">{'✓ Complete' if agent_done else '○ Pending'}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Show risk scores if available
+                risk_scores = res.get("risk_scores", {})
+                if risk_scores:
+                    st.markdown("**📊 Risk Score Breakdown:**")
+                    score_cols = st.columns(4)
+                    with score_cols[0]:
+                        st.metric("Vegetation", f"{risk_scores.get('vegetation_score', 0):.0%}")
+                    with score_cols[1]:
+                        st.metric("Climate", f"{risk_scores.get('climate_score', 0):.0%}")
+                    with score_cols[2]:
+                        st.metric("Sustainability", f"{risk_scores.get('sustainability_score', 0):.0%}")
+                    with score_cols[3]:
+                        composite = risk_scores.get('composite_score', 0)
+                        risk_level = risk_scores.get('risk_level', 'Unknown')
+                        st.metric("Composite", f"{composite:.0%}", delta=risk_level)
 
-    result: Dict[str, Any] | None = None
+            # --- DECISION DETAIL ---
+            st.subheader("📝 Agent Reasoning")
+            
+            # Use a colored container for the decision
+            container_color = "green" if "APPROVED" in decision else "orange" if "CONDITIONAL" in decision else "red"
+            
+            with st.container(border=True):
+                st.markdown(f"**Confidence Score:** {llm.get('confidence', 0):.0%}")
+                st.write(llm.get('reasoning', 'No reasoning provided.'))
 
-    if analyze_clicked:
-        with st.spinner("Analyzing farm sustainability and loan risk..."):
-            try:
-                result = run_analysis(lat, lon, user_context.strip() or None)
-            except Exception as e:  # noqa: BLE001
-                st.error(f"Something went wrong while analyzing this farm: {e}")
-
-    # Only render metrics once we have results
-    if result is not None:
-        farm_data = result.get("farm_data", {}) or {}
-        llm_result = result.get("llm_result", {}) or {}
-
-        ndvi_score = farm_data.get("ndvi_score", 0.0) or 0.0
-        ndvi_status = farm_data.get("status", "Unknown")
-
-        decision = (llm_result.get("decision") or "UNKNOWN").upper()
-        confidence = llm_result.get("confidence", 0.0) or 0.0
-        reasoning = llm_result.get("reasoning") or llm_result.get("raw_response", "")
-
-        # --------------------- Column 2: Satellite NDVI ---------------------
-        with col_satellite:
-            st.subheader("Satellite Vegetation Health")
-            st.metric("NDVI Score", f"{ndvi_score:.3f}")
-            render_status_badge(str(ndvi_status))
-
-            meta_lines = []
-            if farm_data.get("cloud_cover") is not None:
-                meta_lines.append(f"☁️ Cloud cover: {farm_data['cloud_cover']}%")
-            if farm_data.get("acquisition_date"):
-                meta_lines.append(f"📅 Acquisition: {farm_data['acquisition_date']}")
-            if farm_data.get("image_id"):
-                meta_lines.append(f"🛰️ Scene ID: `{farm_data['image_id']}`")
-            if farm_data.get("note"):
-                meta_lines.append(f"ℹ️ {farm_data['note']}")
-
-            if meta_lines:
-                st.markdown("<br>".join(meta_lines))
-
-        # ---------------------- Column 3: AI Decision ----------------------
-        with col_ai:
-            st.subheader("AI Credit Decision")
-
-            approved = "APPROVED" in decision
-            conditional = "CONDITIONAL" in decision
-
-            if approved and not conditional:
-                decision_label = "✅ APPROVED"
-                decision_color = "green"
-            elif conditional or ("APPROVED" in decision and "CONDITIONAL" in decision):
-                decision_label = "🟡 CONDITIONAL APPROVAL"
-                decision_color = "orange"
-            else:
-                decision_label = "❌ REJECTED"
-                decision_color = "red"
-
-            st.markdown(
-                f"<h3 style='color:{decision_color}; margin-bottom:0.25rem;'>{decision_label}</h3>",
-                unsafe_allow_html=True,
-            )
-            st.metric("Model Confidence", f"{confidence:.2f}")
-
-            # ---------------- Verification Layer -----------------
-            if approved or conditional:
-                st.success("✅ Transaction Verified on Ledger")
-
-                verification_payload = {
-                    "farm_data": farm_data,
-                    "decision_data": llm_result,
-                    "issued_at": result.get("timestamp"),
-                    "latitude": lat,
-                    "longitude": lon,
-                }
-                ledger_hash = generate_blockchain_hash(verification_payload)
-
-                st.caption("Blockchain Proof ID")
-                st.code(ledger_hash, language="text")
-
-                # Generate certificate PDF
-                cert_path = create_green_certificate(
-                    farm_data=farm_data,
-                    decision_data=llm_result,
-                    ledger_hash=ledger_hash,
-                    latitude=lat,
-                    longitude=lon,
-                )
-
-                try:
-                    with open(cert_path, "rb") as f:
-                        pdf_bytes = f.read()
-
-                    st.download_button(
-                        label="📄 Download Green Certificate (PDF)",
-                        data=pdf_bytes,
-                        file_name=cert_path.name,
-                        mime="application/pdf",
-                        use_container_width=True,
-                    )
-                except OSError as e:  # noqa: PERF203
-                    st.warning(f"Unable to load certificate file for download: {e}")
-
-        # ---------------------- Agent’s Voice / Reasoning ------------------
-        st.markdown("---")
-        st.subheader("Agent's Reasoning")
-
-        if reasoning:
-            st.info(reasoning)
-        else:
-            st.info("No explanation returned from the AI model.")
-
-    else:
-        st.markdown("---")
-        st.info(
-            "Configure a farm location in the sidebar, then click **“Analyze Farm”** "
-            "to see satellite NDVI, AI loan decisions, and full reasoning."
-        )
-
+            # --- CERTIFICATION (Only if Approved) ---
+            if "APPROVED" in decision or "CONDITIONAL" in decision:
+                st.markdown("### 🔐 Blockchain Verification")
+                
+                c1, c2 = st.columns([3, 1])
+                with c1:
+                    tx_hash = generate_blockchain_hash(farm, llm)
+                    st.info(f"**Ledger Proof ID:** `{tx_hash}`")
+                
+                with c2:
+                    # Generate PDF on the fly
+                    pdf_path, _ = create_green_certificate(farm, llm)
+                    with open(pdf_path, "rb") as f:
+                        st.download_button(
+                            label="📜 Download Cert",
+                            data=f,
+                            file_name="GreenChain_Certificate.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                
+                # Only show balloons on fresh run
+                if run_btn:
+                    st.balloons()
 
 if __name__ == "__main__":
     main()
-
-
