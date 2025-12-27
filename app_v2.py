@@ -1,6 +1,7 @@
 """
 🌱 GreenChain Agent - AI-Powered Sustainable Finance
 Version 2: Wizard-based UX with Progressive Disclosure
+Now with Multi-Language Support! 🌍
 """
 
 import sys
@@ -12,6 +13,9 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 from dotenv import load_dotenv
+
+# Import translations
+from translations import LANGUAGES, t, get_text
 
 # ---------------------------------------------------------------------------
 # Path Setup
@@ -398,6 +402,20 @@ def setup_page():
         .leaflet-control-zoom a:hover {
             background: #ecfdf5 !important;
         }
+        
+        /* Language selector */
+        .lang-selector {
+            position: fixed;
+            top: 10px;
+            right: 20px;
+            z-index: 1000;
+        }
+        
+        /* RTL support for Arabic */
+        .rtl {
+            direction: rtl;
+            text-align: right;
+        }
         </style>
     """, unsafe_allow_html=True)
 
@@ -406,12 +424,39 @@ def setup_page():
 # Components
 # ---------------------------------------------------------------------------
 
+def render_language_selector():
+    """Render language selector in the top-right corner."""
+    # Initialize language
+    if "language" not in st.session_state:
+        st.session_state.language = "en"
+    
+    col1, col2 = st.columns([4, 1])
+    with col2:
+        current_lang = st.session_state.language
+        lang_options = list(LANGUAGES.keys())
+        lang_labels = list(LANGUAGES.values())
+        current_idx = lang_options.index(current_lang) if current_lang in lang_options else 0
+        
+        selected_label = st.selectbox(
+            "🌍",
+            lang_labels,
+            index=current_idx,
+            label_visibility="collapsed"
+        )
+        
+        # Find the language code from label
+        selected_lang = lang_options[lang_labels.index(selected_label)]
+        if selected_lang != st.session_state.language:
+            st.session_state.language = selected_lang
+            st.rerun()
+
+
 def render_brand():
-    st.markdown("""
+    st.markdown(f"""
         <div class="brand">
             <div class="brand-icon">🌱</div>
-            <div class="brand-name">GreenChain</div>
-            <div class="brand-tagline">AI-Powered Sustainable Finance</div>
+            <div class="brand-name">{t('brand_name')}</div>
+            <div class="brand-tagline">{t('brand_tagline')}</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -461,10 +506,10 @@ def page_select_location():
     """Step 1: Location Selection"""
     render_progress(1)
     
-    st.markdown("""
+    st.markdown(f"""
         <div class="card">
-            <div class="card-title">Where is your farm located?</div>
-            <div class="card-subtitle">Click on the map to select your farm location, or use quick presets</div>
+            <div class="card-title">{t('select_location_title')}</div>
+            <div class="card-subtitle">{t('select_location_desc')}</div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -472,7 +517,7 @@ def page_select_location():
     col_map, col_controls = st.columns([1.5, 1], gap="large")
     
     with col_map:
-        st.markdown("**🗺️ Click on the map to select location:**")
+        st.markdown(f"**🗺️ {t('click_map_hint')}**")
         
         # Get current location or default
         current_lat = st.session_state.get("lat", 20.0)
@@ -572,7 +617,7 @@ def page_select_location():
     
     with col_controls:
         # Quick presets
-        st.markdown("**⚡ Quick Presets:**")
+        st.markdown(f"**⚡ {t('quick_select')}:**")
         
         locations = [
             ("🇺🇸 Kansas, USA", 37.669, -100.749),
@@ -597,11 +642,11 @@ def page_select_location():
         st.markdown("---")
         
         # Manual coordinate input
-        st.markdown("**📍 Or enter coordinates:**")
+        st.markdown(f"**📍 {t('coordinates')}:**")
         col1, col2 = st.columns(2)
         with col1:
             manual_lat = st.number_input(
-                "Latitude", 
+                t('latitude'), 
                 value=st.session_state.get("lat", 37.669), 
                 format="%.4f",
                 min_value=-90.0,
@@ -609,7 +654,7 @@ def page_select_location():
             )
         with col2:
             manual_lon = st.number_input(
-                "Longitude", 
+                t('longitude'), 
                 value=st.session_state.get("lon", -100.749), 
                 format="%.4f",
                 min_value=-180.0,
@@ -617,7 +662,7 @@ def page_select_location():
             )
         
         if manual_lat != st.session_state.get("lat") or manual_lon != st.session_state.get("lon"):
-            if st.button("📍 Go to coordinates", use_container_width=True):
+            if st.button(f"📍 {t('coordinates')}", use_container_width=True):
                 st.session_state.lat = manual_lat
                 st.session_state.lon = manual_lon
                 st.rerun()
@@ -625,48 +670,48 @@ def page_select_location():
         # Show selected coordinates
         if "lat" in st.session_state and st.session_state.lat != 20.0:
             st.markdown("---")
-            st.success(f"**Selected:** {st.session_state.lat:.4f}, {st.session_state.lon:.4f}")
+            st.success(f"**{t('location_selected')}:** {st.session_state.lat:.4f}, {st.session_state.lon:.4f}")
             
             # Next button
-            if st.button("Continue →", type="primary", use_container_width=True):
+            if st.button(f"{t('continue')} →", type="primary", use_container_width=True):
                 st.session_state.step = 2
                 st.rerun()
         else:
-            st.info("👆 Click on the map or select a preset to choose your farm location")
+            st.info(t('click_map_hint'))
 
 
 def page_loan_details():
     """Step 2: Loan Purpose"""
     render_progress(2)
     
-    st.markdown("""
+    st.markdown(f"""
         <div class="card">
-            <div class="card-title">Tell us about your loan</div>
-            <div class="card-subtitle">This helps our AI make a better assessment</div>
+            <div class="card-title">{t('loan_purpose_title')}</div>
+            <div class="card-subtitle">{t('loan_purpose_desc')}</div>
         </div>
     """, unsafe_allow_html=True)
     
-    # Quick purpose selection
+    # Quick purpose selection - translated
     purposes = [
-        ("🌾", "Crop Expansion", "Expand cultivation area or try new crops"),
-        ("💧", "Irrigation System", "Install drip or sprinkler irrigation"),
-        ("🚜", "Equipment", "Purchase farming equipment or machinery"),
-        ("🌿", "Organic Transition", "Convert to organic farming practices"),
+        ("🌾", t('suggestion_equipment').replace("🚜 ", ""), t('suggestion_equipment')),
+        ("💧", t('suggestion_irrigation').replace("🌊 ", ""), t('suggestion_irrigation')),
+        ("☀️", t('suggestion_solar').replace("☀️ ", ""), t('suggestion_solar')),
+        ("🌿", t('suggestion_organic').replace("🌿 ", ""), t('suggestion_organic')),
     ]
     
     cols = st.columns(2)
     for i, (icon, title, desc) in enumerate(purposes):
         with cols[i % 2]:
-            if st.button(f"{icon} **{title}**\n\n{desc}", key=f"purpose_{i}", use_container_width=True):
-                st.session_state.loan_purpose = f"{title}: {desc}"
+            if st.button(f"{icon} **{title}**", key=f"purpose_{i}", use_container_width=True):
+                st.session_state.loan_purpose = desc
     
     st.markdown("---")
     
     # Custom input
     purpose = st.text_area(
-        "Or describe your purpose:",
+        t('loan_purpose_label'),
         value=st.session_state.get("loan_purpose", ""),
-        placeholder="e.g., Installing solar-powered drip irrigation for my wheat farm...",
+        placeholder=t('loan_purpose_placeholder'),
         height=100
     )
     st.session_state.loan_purpose = purpose
@@ -674,11 +719,11 @@ def page_loan_details():
     # Navigation
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("← Back", use_container_width=True):
+        if st.button(f"← {t('back')}", use_container_width=True):
             st.session_state.step = 1
             st.rerun()
     with col2:
-        if st.button("Analyze My Farm →", type="primary", use_container_width=True, disabled=not purpose):
+        if st.button(f"{t('analyze')} →", type="primary", use_container_width=True, disabled=not purpose):
             st.session_state.step = 3
             st.rerun()
 
@@ -693,12 +738,12 @@ def page_processing():
     llm_service.MOCK_MODE = False
     
     # Main container
-    st.markdown("""
+    st.markdown(f"""
         <div class="card">
             <div class="processing-container">
                 <div class="processing-icon">🔬</div>
-                <div class="processing-text">Real-Time Analysis in Progress</div>
-                <div class="processing-subtext">Multi-agent AI system analyzing your farm with live data...</div>
+                <div class="processing-text">{t('processing_title')}</div>
+                <div class="processing-subtext">{t('processing_desc')}</div>
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -718,9 +763,9 @@ def page_processing():
                 agent_placeholders.append(st.empty())
     
     agent_info = [
-        {"icon": "🛰️", "name": "Field Scout Agent"},
-        {"icon": "📊", "name": "Risk Analyst Agent"},
-        {"icon": "🏦", "name": "Loan Officer Agent"},
+        {"icon": "🛰️", "name": t('agent_field_scout')},
+        {"icon": "📊", "name": t('agent_risk_analyst')},
+        {"icon": "🏦", "name": t('agent_loan_officer')},
     ]
     
     def update_agent_cards(active_idx):
@@ -732,7 +777,7 @@ def page_processing():
                     <div style="text-align: center; padding: 1rem; background: #ecfdf5; border-radius: 12px; border: 2px solid #10b981;">
                         <div style="font-size: 2rem;">{agent_info[i]['icon']}</div>
                         <div style="font-weight: 600; color: #065f46; font-size: 0.85rem;">{agent_info[i]['name']}</div>
-                        <div style="color: #10b981; font-size: 0.8rem;">✓ Complete</div>
+                        <div style="color: #10b981; font-size: 0.8rem;">✓ {t('status_complete')}</div>
                     </div>
                 """, unsafe_allow_html=True)
             elif i == active_idx:
@@ -741,7 +786,7 @@ def page_processing():
                     <div style="text-align: center; padding: 1rem; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-radius: 12px; border: 2px solid #059669; box-shadow: 0 4px 15px rgba(5, 150, 105, 0.3);">
                         <div style="font-size: 2rem;">{agent_info[i]['icon']}</div>
                         <div style="font-weight: 600; color: #065f46; font-size: 0.85rem;">{agent_info[i]['name']}</div>
-                        <div style="color: #059669; font-size: 0.8rem;">⟳ Working...</div>
+                        <div style="color: #059669; font-size: 0.8rem;">⟳ {t('status_working')}</div>
                     </div>
                 """, unsafe_allow_html=True)
             else:
@@ -750,7 +795,7 @@ def page_processing():
                     <div style="text-align: center; padding: 1rem; background: #f9fafb; border-radius: 12px; border: 2px solid #e5e7eb;">
                         <div style="font-size: 2rem; opacity: 0.5;">{agent_info[i]['icon']}</div>
                         <div style="font-weight: 600; color: #9ca3af; font-size: 0.85rem;">{agent_info[i]['name']}</div>
-                        <div style="color: #9ca3af; font-size: 0.8rem;">○ Waiting</div>
+                        <div style="color: #9ca3af; font-size: 0.8rem;">○ {t('status_waiting')}</div>
                     </div>
                 """, unsafe_allow_html=True)
     
@@ -780,27 +825,27 @@ def page_processing():
     progress_bar.progress(0.05)
     
     # Step 1.1: Satellite data
-    show_status("📡", f"Connecting to AWS Earth Search for Sentinel-2 imagery...")
+    show_status("📡", t('step_connecting_satellite'))
     try:
-        show_status("🌍", f"Searching for satellite scenes at ({lat:.4f}, {lon:.4f})...")
+        show_status("🌍", f"{t('step_searching_scenes')} ({lat:.4f}, {lon:.4f})...")
         satellite_data = satellite_service.get_farm_ndvi(lat, lon)
         ndvi = satellite_data.get('ndvi_score', 0)
-        show_status("✅", f"Satellite analysis complete! NDVI: {ndvi:.3f} ({satellite_data.get('status', 'Unknown')})", True)
+        show_status("✅", f"{t('step_satellite_complete')} {ndvi:.3f} ({satellite_data.get('status', 'Unknown')})", True)
     except Exception as e:
-        show_status("⚠️", f"Satellite service error: {str(e)[:50]}. Using fallback...")
+        show_status("⚠️", f"{t('step_satellite_error')} {str(e)[:50]}. {t('using_fallback')}")
         satellite_data = {"ndvi_score": 0.5, "status": "Fallback", "error": str(e)}
     
     progress_bar.progress(0.20)
     
     # Step 1.2: Weather data
-    show_status("🌤️", "Fetching 90-day weather history from Open-Meteo API...")
+    show_status("🌤️", t('step_fetching_weather'))
     try:
         weather_data = weather_service.get_weather_analysis(lat, lon)
         rainfall = weather_data.get('rainfall_total_mm', 0)
         drought = weather_data.get('drought_risk_score', 0)
-        show_status("✅", f"Weather analysis complete! Rainfall: {rainfall:.1f}mm, Drought Risk: {drought:.2f}", True)
+        show_status("✅", f"{t('step_weather_complete')} {rainfall:.1f}{t('mm')}, {t('drought_risk')}: {drought:.2f}", True)
     except Exception as e:
-        show_status("⚠️", f"Weather service error: {str(e)[:50]}. Using fallback...")
+        show_status("⚠️", f"{t('step_weather_error')} {str(e)[:50]}. {t('using_fallback')}")
         weather_data = {"rainfall_total_mm": 200, "drought_risk_score": 0.3, "weather_risk_score": 0.3}
     
     progress_bar.progress(0.35)
@@ -808,31 +853,31 @@ def page_processing():
     # ========== AGENT 2: RISK ANALYST ==========
     update_agent_cards(1)
     
-    show_status("📈", "Computing vegetation health score from NDVI...")
+    show_status("📈", t('step_computing_vegetation'))
     ndvi_score = satellite_data.get("ndvi_score", 0.5)
     vegetation_score = min(1.0, ndvi_score / 0.8) if ndvi_score > 0 else 0.3
     
     progress_bar.progress(0.45)
     
-    show_status("☁️", "Analyzing climate favorability index...")
+    show_status("☁️", t('step_analyzing_climate'))
     weather_risk = weather_data.get("weather_risk_score", 0.5)
     climate_score = 1 - weather_risk
     
     progress_bar.progress(0.50)
     
-    show_status("♻️", "Calculating sustainability metrics...")
+    show_status("♻️", t('step_calculating_sustainability'))
     drought_risk = weather_data.get("drought_risk_score", 0.5)
     sustainability_score = 1 - drought_risk
     
     progress_bar.progress(0.55)
     
-    show_status("⚖️", "Computing weighted composite risk score...")
+    show_status("⚖️", t('step_computing_risk'))
     composite_score = (
         vegetation_score * 0.40 +
         climate_score * 0.30 +
         sustainability_score * 0.30
     )
-    risk_level = "LOW" if composite_score > 0.6 else "MEDIUM" if composite_score > 0.4 else "HIGH"
+    risk_level = t('risk_low') if composite_score > 0.6 else t('risk_medium') if composite_score > 0.4 else t('risk_high')
     
     risk_scores = {
         "vegetation_score": round(vegetation_score, 3),
@@ -842,28 +887,28 @@ def page_processing():
         "risk_level": risk_level
     }
     
-    show_status("✅", f"Risk analysis complete! Composite: {composite_score:.2f}, Level: {risk_level}", True)
+    show_status("✅", f"{t('step_risk_complete')} {composite_score:.2f}, {t('level')}: {risk_level}", True)
     progress_bar.progress(0.65)
     
     # ========== AGENT 3: LOAN OFFICER ==========
     update_agent_cards(2)
     
-    show_status("📋", "Preparing analysis data for AI evaluation...")
+    show_status("📋", t('step_preparing_ai'))
     combined_data = {**satellite_data, "weather": weather_data, "risk_scores": risk_scores}
     
     progress_bar.progress(0.70)
     
-    show_status("🤖", "Sending data to Google Gemini Pro for AI analysis...")
-    show_status("💭", "AI is evaluating sustainability, risk factors, and loan purpose...")
+    show_status("🤖", t('step_sending_ai'))
+    show_status("💭", t('step_ai_evaluating'))
     
     try:
         llm_result = llm_service.analyze_loan_risk(combined_data, user_request=purpose)
         decision = llm_result.get('decision', 'PENDING')
         confidence = llm_result.get('confidence', 0)
         model = llm_result.get('model_used', 'unknown')
-        show_status("✅", f"AI Decision: {decision} (Confidence: {confidence:.0%}) - Model: {model}", True)
+        show_status("✅", f"{t('step_ai_decision')} {decision} ({t('confidence')}: {confidence:.0%}) - {t('model')}: {model}", True)
     except Exception as e:
-        show_status("⚠️", f"LLM error: {str(e)[:50]}. Using rule-based decision...")
+        show_status("⚠️", f"{t('step_ai_error')} {str(e)[:50]}. {t('using_fallback')}")
         # Fallback decision
         if composite_score > 0.6:
             decision = "APPROVED"
@@ -884,13 +929,13 @@ def page_processing():
     
     progress_bar.progress(0.90)
     
-    show_status("🔐", "Creating blockchain verification hash...")
+    show_status("🔐", t('step_blockchain'))
     progress_bar.progress(0.95)
     
     # Mark all agents complete
     update_agent_cards(3)
     
-    show_status("✅", "All agents completed successfully! Preparing results...", True)
+    show_status("✅", t('step_all_complete'), True)
     progress_bar.progress(1.0)
     
     # Store results
@@ -921,67 +966,62 @@ def page_results():
     
     # Decision Hero
     if "APPROVED" in decision:
-        icon, title, css_class = "🎉", "Approved!", "approved"
+        icon, title, css_class = "🎉", t('approved'), "approved"
         st.balloons()
     elif "CONDITIONAL" in decision:
-        icon, title, css_class = "⚡", "Conditionally Approved", "conditional"
+        icon, title, css_class = "⚡", t('conditional'), "conditional"
     else:
-        icon, title, css_class = "😔", "Not Approved", "rejected"
+        icon, title, css_class = "😔", t('rejected'), "rejected"
     
     st.markdown(f"""
         <div class="result-hero">
             <div class="result-icon">{icon}</div>
             <div class="result-title {css_class}">{title}</div>
-            <div class="result-confidence">Confidence: {confidence:.0%}</div>
+            <div class="result-confidence">{t('confidence_label')}: {confidence:.0%}</div>
         </div>
     """, unsafe_allow_html=True)
     
     # Key Stats
-    st.markdown("""
+    st.markdown(f"""
         <div class="stats-grid">
             <div class="stat-box">
-                <div class="stat-value">{:.2f}</div>
-                <div class="stat-label">NDVI Score</div>
+                <div class="stat-value">{farm.get("ndvi_score", 0):.2f}</div>
+                <div class="stat-label">{t('ndvi_score')}</div>
             </div>
             <div class="stat-box">
-                <div class="stat-value">{}</div>
-                <div class="stat-label">Vegetation</div>
+                <div class="stat-value">{farm.get("status", "N/A")}</div>
+                <div class="stat-label">{t('vegetation_health')}</div>
             </div>
             <div class="stat-box">
-                <div class="stat-value">{:.0%}</div>
-                <div class="stat-label">Weather Risk</div>
+                <div class="stat-value">{weather.get("weather_risk_score", 0) if weather else 0:.0%}</div>
+                <div class="stat-label">{t('drought_risk')}</div>
             </div>
             <div class="stat-box">
-                <div class="stat-value">{:.0%}</div>
-                <div class="stat-label">Overall Score</div>
+                <div class="stat-value">{risk_scores.get("composite_score", confidence):.0%}</div>
+                <div class="stat-label">{t('composite_score')}</div>
             </div>
         </div>
-    """.format(
-        farm.get("ndvi_score", 0),
-        farm.get("status", "N/A"),
-        weather.get("weather_risk_score", 0) if weather else 0,
-        risk_scores.get("composite_score", confidence)
-    ), unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
     
     # Reasoning
-    with st.expander("📝 View Detailed Analysis", expanded=False):
+    with st.expander(f"📝 {t('view_details')}", expanded=False):
         st.markdown(llm.get("reasoning", "No analysis available."))
         
         if llm.get("recommendations"):
-            st.markdown("**Recommendations:**")
+            st.markdown(f"**{t('recommendations')}:**")
             for rec in llm["recommendations"]:
                 st.markdown(f"• {rec}")
     
     # Weather Details
     if weather:
-        with st.expander("🌤️ Climate Data", expanded=False):
+        with st.expander(f"🌤️ {t('climate_data')}", expanded=False):
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Rainfall", f"{weather.get('rainfall_total_mm', 'N/A')} mm")
+                st.metric(t('rainfall'), f"{weather.get('rainfall_total_mm', 'N/A')} {t('mm')}")
             with col2:
-                st.metric("Temperature", f"{weather.get('temperature_avg_c', 'N/A')}°C")
+                st.metric(t('temperature'), f"{weather.get('temperature_avg_c', 'N/A')}°C")
             with col3:
-                st.metric("Drought Risk", f"{weather.get('drought_risk_score', 0):.0%}")
+                st.metric(t('drought_risk'), f"{weather.get('drought_risk_score', 0):.0%}")
     
     # Certificate (if approved)
     if "APPROVED" in decision or "CONDITIONAL" in decision:
@@ -989,7 +1029,7 @@ def page_results():
         
         st.markdown(f"""
             <div class="cert-box">
-                <div class="cert-title">🔐 Blockchain Verification</div>
+                <div class="cert-title">🔐 {t('blockchain_hash')}</div>
                 <div class="cert-hash">{tx_hash}</div>
             </div>
         """, unsafe_allow_html=True)
@@ -998,7 +1038,7 @@ def page_results():
             pdf_path, _ = create_green_certificate(farm, llm)
             with open(pdf_path, "rb") as f:
                 st.download_button(
-                    "📄 Download Certificate",
+                    f"📄 {t('download_certificate')}",
                     data=f,
                     file_name="GreenChain_Certificate.pdf",
                     mime="application/pdf",
@@ -1010,7 +1050,7 @@ def page_results():
     st.markdown("---")
     
     # Start over
-    if st.button("🔄 Start New Application", use_container_width=True):
+    if st.button(f"🔄 {t('new_application')}", use_container_width=True):
         for key in ["step", "lat", "lon", "loan_purpose", "result"]:
             if key in st.session_state:
                 del st.session_state[key]
@@ -1023,9 +1063,16 @@ def page_results():
 def main():
     setup_page()
     
-    # Initialize
+    # Initialize language
+    if "language" not in st.session_state:
+        st.session_state.language = "en"
+    
+    # Initialize step
     if "step" not in st.session_state:
         st.session_state.step = 1
+    
+    # Language selector at top
+    render_language_selector()
     
     # Brand header
     render_brand()
