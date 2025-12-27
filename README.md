@@ -9,19 +9,23 @@ By leveraging **AWS Satellite Imagery (Sentinel-2)** and **GenAI**, it validates
 ## 🎯 The Problem
 * **Financial Exclusion:** Small farmers lack the paper trail (credit history) to get bank loans.
 * **Greenwashing Risk:** Banks want to lend for sustainability but can't verify if a farm is actually "green" without expensive site visits.
+* **Lack of Transparency:** Single-point-in-time analysis doesn't capture farming history.
 
 ## 💡 Our Solution
 An AI Agent that acts as a "Digital Field Officer":
-1.  **Perceives:** Fetches real-time satellite data (NDVI/Vegetation Index) using **AWS Open Data**.
-2.  **Reasons:** Uses **Google Gemini Pro** to analyze the crop health and farming history.
-3.  **Acts:** Approves loans and mints a **"Green Verification Certificate"** anchored on a simulated ledger.
+1.  **Perceives:** Fetches 6 months of satellite data (NDVI trend) using **AWS Open Data**.
+2.  **Detects:** Checks for deforestation and land-use changes over 2 years.
+3.  **Scores:** Calculates transparent sustainability metrics with component breakdown.
+4.  **Reasons:** Uses **Google Gemini Pro** to analyze risks and provide recommendations.
+5.  **Acts:** Approves loans with suggested interest rates and mints a **"Green Verification Certificate"**.
 
 ## 🛠️ Tech Stack (Sponsor Integration)
-* **Satellite Data:** AWS Open Data Registry (Sentinel-2 L2A) via `pystac-client`.
-* **AI Engine:** Large Language Model (Google Gemini Pro) for risk reasoning.
-* **Backend:** Python (FastAPI/Lambda structure).
-* **Frontend:** Streamlit.
-* **Verification:** Cryptographic Hashing (Simulating Caffeine AI/ICP Blockchain).
+* **Satellite Data:** AWS Open Data Registry (Sentinel-2 L2A) via `pystac-client`
+* **AI Engine:** Large Language Model (Google Gemini Pro) for risk reasoning
+* **Visualization:** Plotly for interactive NDVI trend charts
+* **Backend:** Python with advanced satellite services (multi-temporal analysis)
+* **Frontend:** Streamlit with Folium maps (polygon drawing support)
+* **Verification:** Cryptographic Hashing (Simulating Caffeine AI/ICP Blockchain)
 
 ## ⚡ How to Run
 1.  Clone the repo:
@@ -50,38 +54,49 @@ An AI Agent that acts as a "Digital Field Officer":
   - Get your API key from the dashboard
   - Add it to `.env.local` as `GEMINI_API_KEY=your_key_here`
 - **Mock Mode**: The app includes mock modes for both satellite data and AI analysis
-  - Use the toggles in the UI to bypass API requirements during development
 
 ## ✨ Key Features
-- **Real-time Satellite Analysis:** Live NDVI (Normalized Difference Vegetation Index) calculation from Sentinel-2 data
-- **AI-Powered Risk Assessment:** Google Gemini Pro analyzes crop health and sustainability metrics
-- **Instant Loan Decisions:** Automated approval process based on verified sustainable practices
-- **Blockchain Verification:** Cryptographically secure certificates with unique hashes
-- **Interactive Dashboard:** Streamlit interface with maps, satellite imagery, and decision visualization
-- **PDF Certificate Generation:** Downloadable verification documents for banking records
+- **Multi-Temporal NDVI Analysis:** 6-month historical NDVI trends with consistency scoring
+- **Deforestation Detection:** 2-year land-use change analysis to prevent greenwashing
+- **Polygon Farm Boundaries:** Draw precise farm boundaries for accurate area analysis
+- **Sustainability Score Breakdown:**
+  - 📈 Vegetation Trend Score
+  - 🔄 Farming Consistency Score
+  - 🌳 No Deforestation Score
+  - ☁️ Climate Resilience Score
+- **Loan Risk Calculator:** Suggested interest rates and max loan amounts
+- **Interactive NDVI Charts:** Plotly visualization of 6-month trends
+- **AI-Powered Analysis:** Gemini Pro reasoning with risk factors and recommendations
+- **Blockchain Verification:** Cryptographically secure certificates
 
 ## 🏗️ Architecture
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Streamlit UI  │───▶│   AI Agent       │───▶│  Verification   │
-│                 │    │  (Gemini Pro)    │    │   Service       │
+│   Streamlit UI  │───▶│  Advanced        │───▶│  Sustainability │
+│  (Polygon Draw) │    │  Satellite Svc   │    │  Score Engine   │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│ AWS Satellite   │    │  Risk Analysis   │    │ Blockchain Hash │
-│   Data (STAC)   │    │  & Reasoning     │    │   Generation    │
+│ Multi-Temporal  │    │  Deforestation   │    │  Loan Risk      │
+│ NDVI (6 months) │    │  Detection (2yr) │    │  Calculator     │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│ AWS Sentinel-2  │    │  Gemini Pro AI   │    │ Blockchain Hash │
+│   (STAC API)    │    │  Analysis        │    │ & Certificate   │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
-## 🎥 Demo
-1. **Enter Farm Coordinates:** Input latitude/longitude (e.g., Kansas: 37.669, -100.749)
-2. **Analyze Sustainability:** Agent fetches Sentinel-2 satellite data and calculates NDVI
-3. **AI Decision:** Gemini Pro analyzes crop health and approves/rejects loans
-4. **Generate Certificate:** Download blockchain-verified PDF for banking records
+## 🎥 Demo (4-Step Wizard)
+1. **Select Location:** Click map OR draw polygon farm boundary
+2. **Loan Details:** Select loan amount ($100-$10,000) and purpose
+3. **Processing:** Multi-temporal NDVI, deforestation check, weather analysis, sustainability scoring
+4. **Results:** View sustainability score, NDVI trends, deforestation status, AI analysis, and loan terms
 
 ## 📸 Screenshots
-*(Add a screenshot of your Streamlit Dashboard showing the "Approved" certificate here)*
+*(Add screenshots showing: polygon drawing, sustainability score breakdown, NDVI trend chart, results tabs)*
 
 ## 🤝 Contributing
 1. Fork the repository

@@ -59,9 +59,14 @@ def create_green_certificate(farm_data: dict, decision_data: dict, ledger_hash: 
     if longitude is None:
         longitude = "N/A"
     
-    # PDF Setup
-    filename = f"GreenChain_Certificate_{int(time.time())}.pdf"
-    c = canvas.Canvas(filename, pagesize=letter)
+    # PDF Setup - save to output directory
+    # Get the project root directory (where app.py is)
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    output_dir = project_root / "output"
+    output_dir.mkdir(exist_ok=True)
+    
+    filename = output_dir / f"GreenChain_Certificate_{int(time.time())}.pdf"
+    c = canvas.Canvas(str(filename), pagesize=letter)
 
     # --- DESIGN ---
     # Header

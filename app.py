@@ -1,17 +1,28 @@
 """
 🌱 GreenChain Agent - AI-Powered Sustainable Finance
-Redesigned with modern UX principles for hackathon impact.
+Features:
+- Multi-temporal NDVI analysis (6 months trend)
+- Deforestation detection
+- Polygon farm boundary selection
+- Transparent structured scoring model
 """
 
 import sys
 import time
+import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import streamlit as st
 import folium
+from folium.plugins import Draw
 from streamlit_folium import st_folium
 from dotenv import load_dotenv
+import plotly.graph_objects as go
+import plotly.express as px
+
+# Import translations
+from translations import LANGUAGES, t, get_text
 
 # ---------------------------------------------------------------------------
 # Path Setup
@@ -21,7 +32,6 @@ BACKEND_SRC = ROOT_DIR / "backend" / "src"
 if str(BACKEND_SRC) not in sys.path:
     sys.path.insert(0, str(BACKEND_SRC))
 
-# Load Environment
 env_path = ROOT_DIR / ".env.local"
 if env_path.exists():
     load_dotenv(env_path)
@@ -33,802 +43,905 @@ try:
     import services.satellite_service as satellite_service
     import services.weather_service as weather_service
     from services import llm_service
+    from services.advanced_satellite_service import (
+        get_multi_temporal_ndvi,
+        check_deforestation,
+        calculate_sustainability_score,
+        calculate_loan_risk_score,
+    )
     from services.verification_service import (
         create_green_certificate,
         generate_blockchain_hash,
     )
-    from agents.multi_agent_system import process_loan_with_agents
-    MULTI_AGENT_AVAILABLE = True
+    SERVICES_AVAILABLE = True
 except ImportError as e:
-    st.error(f"Backend Import Error: {e}. Make sure you are running from the root directory.")
-    MULTI_AGENT_AVAILABLE = False
+    st.error(f"Backend Import Error: {e}")
+    SERVICES_AVAILABLE = False
     st.stop()
 
 
 # ---------------------------------------------------------------------------
-# Page Configuration & Custom CSS
+# Page Config & Styles
 # ---------------------------------------------------------------------------
 def setup_page():
     st.set_page_config(
-        page_title="GreenChain | Sustainable Finance AI",
+        page_title="GreenChain",
         page_icon="🌱",
         layout="wide",
         initial_sidebar_state="collapsed"
     )
-
+    
     st.markdown("""
         <style>
-        /* Import Modern Fonts */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
         
-        /* Global Styles */
-        html, body, [class*="css"] {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        * { font-family: 'Inter', sans-serif; }
+        
+        .block-container { 
+            padding: 2rem 3rem; 
+            max-width: 1200px; 
         }
+        #MainMenu, footer, header { visibility: hidden; }
         
-        /* Remove default padding */
-        .block-container {
-            padding-top: 1rem;
-            padding-bottom: 1rem;
-            max-width: 1200px;
-        }
-        
-        /* Hide Streamlit branding */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
-        
-        /* Custom Hero Header */
-        .hero-container {
-            background: linear-gradient(135deg, #064e3b 0%, #047857 50%, #059669 100%);
-            padding: 2rem 2.5rem;
-            border-radius: 16px;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 10px 40px rgba(6, 78, 59, 0.3);
-        }
-        
-        .hero-title {
-            color: white;
-            font-size: 2.5rem;
-            font-weight: 800;
-            margin: 0;
-            letter-spacing: -0.5px;
-        }
-        
-        .hero-subtitle {
-            color: rgba(255,255,255,0.85);
-            font-size: 1.1rem;
-            font-weight: 400;
-            margin-top: 0.5rem;
-        }
-        
-        .hero-badge {
-            display: inline-block;
-            background: rgba(255,255,255,0.2);
-            color: white;
-            padding: 0.35rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            margin-top: 1rem;
-            backdrop-filter: blur(10px);
-        }
-        
-        /* Step Cards */
-        .step-card {
-            background: white;
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 1.25rem;
+        /* Brand */
+        .brand {
             text-align: center;
-            transition: all 0.3s ease;
-            height: 100%;
+            padding: 1rem 0 2rem;
         }
-        
-        .step-card:hover {
-            border-color: #059669;
-            box-shadow: 0 4px 20px rgba(5, 150, 105, 0.15);
-        }
-        
-        .step-card.active {
-            border-color: #059669;
-            background: linear-gradient(180deg, #ecfdf5 0%, white 100%);
-        }
-        
-        .step-number {
-            width: 32px;
-            height: 32px;
-            background: #059669;
+        .brand-icon { font-size: 3rem; margin-bottom: 0.5rem; }
+        .brand-name { font-size: 1.5rem; font-weight: 700; color: #064e3b; letter-spacing: -0.5px; }
+        .brand-tagline { color: #6b7280; font-size: 0.9rem; }
+        .version-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
             color: white;
+            font-size: 0.65rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 10px;
+            margin-left: 0.5rem;
+            vertical-align: super;
+        }
+        
+        /* Progress Steps */
+        .progress-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 2rem 0;
+            gap: 0.5rem;
+        }
+        .progress-step {
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
-            display: inline-flex;
+            display: flex;
             align-items: center;
             justify-content: center;
-            font-weight: 700;
-            font-size: 0.9rem;
-            margin-bottom: 0.5rem;
-        }
-        
-        .step-title {
             font-weight: 600;
-            color: #1f2937;
-            margin: 0.5rem 0 0.25rem;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+        .progress-step.completed { background: #059669; color: white; }
+        .progress-step.active {
+            background: #064e3b;
+            color: white;
+            transform: scale(1.1);
+            box-shadow: 0 4px 15px rgba(6, 78, 59, 0.4);
+        }
+        .progress-step.pending { background: #e5e7eb; color: #9ca3af; }
+        .progress-line { width: 60px; height: 3px; background: #e5e7eb; border-radius: 2px; }
+        .progress-line.completed { background: #059669; }
+
+        /* Override Streamlit blue halo */
+        .stApp {
+            background: #ffffff;
+        }
+        div[data-testid="stAppViewBlockContainer"] {
+            box-shadow: 0 10px 40px rgba(5, 150, 105, 0.08) !important;
+            border-radius: 24px;
+            background: white;
+            margin-top: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid #f0fdf4;
         }
         
-        .step-desc {
-            color: #6b7280;
-            font-size: 0.85rem;
-        }
-        
-        /* Decision Cards */
-        .decision-card {
+        /* Card Styles */
+        .card {
+            background: white;
+            border: 1px solid #e5e7eb;
             border-radius: 16px;
             padding: 2rem;
-            text-align: center;
             margin: 1rem 0;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
         }
+        .card-title { font-size: 1.25rem; font-weight: 700; color: #111827; margin-bottom: 0.5rem; }
+        .card-subtitle { color: #6b7280; font-size: 0.9rem; margin-bottom: 1.5rem; }
         
-        .decision-approved {
-            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-            border: 2px solid #10b981;
-        }
-        
-        .decision-conditional {
-            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-            border: 2px solid #f59e0b;
-        }
-        
-        .decision-rejected {
-            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-            border: 2px solid #ef4444;
-        }
-        
-        .decision-icon {
-            font-size: 4rem;
-            margin-bottom: 0.5rem;
-        }
-        
-        .decision-title {
-            font-size: 1.75rem;
-            font-weight: 800;
-            margin: 0.5rem 0;
-        }
-        
-        .decision-approved .decision-title { color: #059669; }
-        .decision-conditional .decision-title { color: #d97706; }
-        .decision-rejected .decision-title { color: #dc2626; }
-        
-        .decision-confidence {
-            font-size: 0.9rem;
-            color: #6b7280;
-            margin-top: 0.5rem;
-        }
-        
-        /* Metric Cards */
-        .metric-card {
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 1rem;
+        /* Score Card */
+        .score-card {
+            background: linear-gradient(135deg, #064e3b 0%, #047857 100%);
+            border-radius: 16px;
+            padding: 2rem;
+            color: white;
             text-align: center;
         }
+        .score-value { font-size: 4rem; font-weight: 800; line-height: 1; }
+        .score-grade { font-size: 1.5rem; font-weight: 600; opacity: 0.9; }
+        .score-label { font-size: 0.9rem; opacity: 0.8; margin-top: 0.5rem; }
         
-        .metric-value {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: #064e3b;
-        }
-        
-        .metric-label {
-            font-size: 0.8rem;
-            color: #6b7280;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        /* Agent Pipeline */
-        .agent-pipeline {
+        /* Component Score */
+        .component-row {
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .component-icon { font-size: 1.5rem; width: 40px; }
+        .component-name { flex: 1; font-weight: 500; color: #374151; }
+        .component-bar-container { width: 120px; height: 8px; background: #e5e7eb; border-radius: 4px; margin: 0 1rem; }
+        .component-bar { height: 100%; border-radius: 4px; }
+        .component-value { width: 50px; text-align: right; font-weight: 600; color: #064e3b; }
+        
+        /* Risk/Positive Factor */
+        .factor-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 0.75rem;
+            border-radius: 8px;
+            margin: 0.25rem 0;
+            font-size: 0.9rem;
+        }
+        .factor-risk { background: #fef2f2; color: #991b1b; }
+        .factor-positive { background: #f0fdf4; color: #166534; }
+        
+        /* Result Styles */
+        .result-hero { text-align: center; padding: 2rem; }
+        .result-icon { font-size: 5rem; margin-bottom: 1rem; }
+        .result-title { font-size: 2rem; font-weight: 800; margin-bottom: 0.5rem; }
+        .result-title.approved { color: #059669; }
+        .result-title.conditional { color: #d97706; }
+        .result-title.rejected { color: #dc2626; }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
             margin: 1.5rem 0;
         }
-        
-        .agent-node {
-            flex: 1;
-            text-align: center;
-            padding: 1rem;
+        .stat-box {
             background: #f9fafb;
             border-radius: 12px;
-            margin: 0 0.5rem;
-            border: 2px solid transparent;
-            transition: all 0.3s ease;
-        }
-        
-        .agent-node.complete {
-            background: #ecfdf5;
-            border-color: #10b981;
-        }
-        
-        .agent-node.active {
-            background: #eff6ff;
-            border-color: #3b82f6;
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
-            50% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
-        }
-        
-        .agent-icon {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
-        }
-        
-        .agent-name {
-            font-weight: 600;
-            font-size: 0.9rem;
-            color: #374151;
-        }
-        
-        .agent-status {
-            font-size: 0.75rem;
-            color: #6b7280;
-            margin-top: 0.25rem;
-        }
-        
-        .agent-connector {
-            color: #d1d5db;
-            font-size: 1.5rem;
-        }
-        
-        /* Sample Locations */
-        .location-chip {
-            display: inline-block;
-            background: #f3f4f6;
-            border: 1px solid #e5e7eb;
-            border-radius: 20px;
-            padding: 0.4rem 0.8rem;
-            font-size: 0.8rem;
-            margin: 0.25rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .location-chip:hover {
-            background: #ecfdf5;
-            border-color: #059669;
-            color: #059669;
-        }
-        
-        /* Progress Bar */
-        .custom-progress {
-            height: 6px;
-            background: #e5e7eb;
-            border-radius: 3px;
-            overflow: hidden;
-            margin: 0.5rem 0;
-        }
-        
-        .custom-progress-bar {
-            height: 100%;
-            background: linear-gradient(90deg, #059669, #10b981);
-            border-radius: 3px;
-            transition: width 0.5s ease;
-        }
-        
-        /* Blockchain Hash */
-        .blockchain-hash {
-            font-family: 'SF Mono', 'Fira Code', monospace;
-            font-size: 0.85rem;
-            background: #1f2937;
-            color: #10b981;
             padding: 1rem;
-            border-radius: 8px;
-            word-break: break-all;
-            margin: 0.5rem 0;
+            text-align: center;
         }
+        .stat-value { font-size: 1.5rem; font-weight: 700; color: #064e3b; }
+        .stat-label { font-size: 0.75rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; }
         
-        /* Info Box */
-        .info-box {
-            background: #eff6ff;
-            border-left: 4px solid #3b82f6;
-            padding: 1rem;
-            border-radius: 0 8px 8px 0;
+        /* Certificate Box */
+        .cert-box {
+            background: linear-gradient(135deg, #064e3b 0%, #047857 100%);
+            border-radius: 12px;
+            padding: 1.5rem;
+            color: white;
             margin: 1rem 0;
         }
-        
-        /* Stacked Bar Chart */
-        .score-bar-container {
-            display: flex;
-            height: 24px;
-            border-radius: 12px;
-            overflow: hidden;
-            background: #e5e7eb;
-            margin: 0.5rem 0;
+        .cert-title { font-weight: 600; margin-bottom: 0.5rem; }
+        .cert-hash {
+            font-family: monospace;
+            font-size: 0.75rem;
+            background: rgba(0,0,0,0.2);
+            padding: 0.5rem;
+            border-radius: 6px;
+            word-break: break-all;
         }
         
-        .score-bar-segment {
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.7rem;
-            font-weight: 600;
-            color: white;
-        }
+        /* Map container */
+        iframe { border-radius: 12px !important; border: 2px solid #e5e7eb !important; }
         
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .hero-title { font-size: 1.75rem; }
-            .decision-icon { font-size: 3rem; }
-        }
+        /* Hide streamlit elements */
+        div[data-testid="stDecoration"] { display: none; }
+        .stDeployButton { display: none; }
         </style>
     """, unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
-# Helper Components
+# Components
 # ---------------------------------------------------------------------------
 
-def render_hero():
-    """Render the hero header section."""
-    st.markdown("""
-        <div class="hero-container">
-            <div class="hero-title">🌱 GreenChain Agent</div>
-            <div class="hero-subtitle">AI-Powered Verification for Sustainable Agricultural Micro-Loans</div>
-            <div class="hero-badge">🤖 Multi-Agent System • 🛰️ Satellite Verified • ⛓️ Blockchain Secured</div>
+def render_language_selector():
+    """Render language selector."""
+    if "language" not in st.session_state:
+        st.session_state.language = "en"
+    
+    col1, col2 = st.columns([4, 1])
+    with col2:
+        current_lang = st.session_state.language
+        lang_options = list(LANGUAGES.keys())
+        lang_labels = list(LANGUAGES.values())
+        current_idx = lang_options.index(current_lang) if current_lang in lang_options else 0
+        
+        selected_label = st.selectbox(
+            "🌍", lang_labels, index=current_idx, label_visibility="collapsed"
+        )
+        
+        selected_lang = lang_options[lang_labels.index(selected_label)]
+        if selected_lang != st.session_state.language:
+            st.session_state.language = selected_lang
+            st.rerun()
+
+
+def render_brand():
+    st.markdown(f"""
+        <div class="brand">
+            <div class="brand-icon">🌱</div>
+            <div class="brand-name">
+                {t('brand_name')}
+            </div>
+            <div class="brand-tagline">{t('brand_tagline')} • Multi-Temporal Analysis</div>
         </div>
     """, unsafe_allow_html=True)
 
 
-def render_step_indicators(current_step: int):
-    """Render the step indicator showing progress."""
-    steps = [
-        ("1", "Select Location", "Choose farm coordinates"),
-        ("2", "Configure", "Set analysis parameters"),
-        ("3", "Analyze", "Run AI verification"),
-        ("4", "Results", "View decision & certificate")
-    ]
-    
-    cols = st.columns(4)
-    for i, (num, title, desc) in enumerate(steps):
-        with cols[i]:
-            active = "active" if i + 1 == current_step else ""
-            completed = "✓" if i + 1 < current_step else num
-            st.markdown(f"""
-                <div class="step-card {active}">
-                    <div class="step-number">{completed}</div>
-                    <div class="step-title">{title}</div>
-                    <div class="step-desc">{desc}</div>
-                </div>
-            """, unsafe_allow_html=True)
-
-
-def render_agent_pipeline(agents_run: list, is_running: bool = False):
-    """Render the multi-agent workflow visualization."""
-    agents = [
-        ("🛰️", "Field Scout", "Satellite & Weather"),
-        ("📊", "Risk Analyst", "Score Calculation"),
-        ("🏦", "Loan Officer", "Final Decision")
-    ]
-    
-    html = '<div class="agent-pipeline">'
-    for i, (icon, name, desc) in enumerate(agents):
-        agent_key = ["field_scout", "risk_analyst", "loan_officer"][i]
-        
-        if agent_key in agents_run:
-            status_class = "complete"
-            status_text = "✓ Complete"
-        elif is_running and len(agents_run) == i:
-            status_class = "active"
-            status_text = "⟳ Processing..."
+def render_progress(current: int, total: int = 4):
+    steps_html = ""
+    for i in range(1, total + 1):
+        if i < current:
+            step_class = "completed"
+            content = "✓"
+        elif i == current:
+            step_class = "active"
+            content = str(i)
         else:
-            status_class = ""
-            status_text = "○ Pending"
-        
-        html += f'''
-            <div class="agent-node {status_class}">
-                <div class="agent-icon">{icon}</div>
-                <div class="agent-name">{name}</div>
-                <div class="agent-status">{status_text}</div>
-            </div>
-        '''
-        if i < 2:
-            html += '<div class="agent-connector">→</div>'
+            step_class = "pending"
+            content = str(i)
+        steps_html += f'<div class="progress-step {step_class}">{content}</div>'
+        if i < total:
+            line_class = "completed" if i < current else ""
+            steps_html += f'<div class="progress-line {line_class}"></div>'
     
-    html += '</div>'
-    st.markdown(html, unsafe_allow_html=True)
+    st.markdown(f'<div class="progress-container">{steps_html}</div>', unsafe_allow_html=True)
 
 
-def render_decision_card(decision: str, confidence: float):
-    """Render the prominent decision card."""
-    if "APPROVED" in decision:
-        card_class = "decision-approved"
-        icon = "✅"
-        title = "LOAN APPROVED"
-    elif "CONDITIONAL" in decision:
-        card_class = "decision-conditional"
-        icon = "⚠️"
-        title = "CONDITIONAL APPROVAL"
-    else:
-        card_class = "decision-rejected"
-        icon = "❌"
-        title = "NOT APPROVED"
+def render_sustainability_score(sustainability: Dict[str, Any]):
+    """Render the sustainability score card with component breakdown."""
+    overall = sustainability.get("overall_score", 0)
+    grade = sustainability.get("grade", "N/A")
+    components = sustainability.get("component_scores", {})
     
+    # Main score
     st.markdown(f"""
-        <div class="decision-card {card_class}">
-            <div class="decision-icon">{icon}</div>
-            <div class="decision-title">{title}</div>
-            <div class="decision-confidence">Confidence: {confidence:.0%}</div>
+        <div class="score-card">
+            <div class="score-value">{overall}</div>
+            <div class="score-grade">Grade {grade}</div>
+            <div class="score-label">{sustainability.get('interpretation', '')}</div>
         </div>
     """, unsafe_allow_html=True)
-
-
-def render_metric_row(metrics: list):
-    """Render a row of metric cards."""
-    cols = st.columns(len(metrics))
-    for col, (label, value, icon) in zip(cols, metrics):
-        with col:
-            st.markdown(f"""
-                <div class="metric-card">
-                    <div style="font-size: 1.5rem; margin-bottom: 0.25rem;">{icon}</div>
-                    <div class="metric-value">{value}</div>
-                    <div class="metric-label">{label}</div>
+    
+    st.markdown("### Score Components")
+    
+    # Component breakdown
+    component_info = [
+        ("📈", "Vegetation Trend", components.get("trend_score", 0), "#10b981"),
+        ("🔄", "Farming Consistency", components.get("consistency_score", 0), "#3b82f6"),
+        ("🌳", "No Deforestation", components.get("deforestation_score", 0), "#059669"),
+        ("☁️", "Climate Resilience", components.get("climate_score", 0), "#8b5cf6"),
+    ]
+    
+    for icon, name, score, color in component_info:
+        bar_width = max(5, score)  # Minimum 5% for visibility
+        st.markdown(f"""
+            <div class="component-row">
+                <div class="component-icon">{icon}</div>
+                <div class="component-name">{name}</div>
+                <div class="component-bar-container">
+                    <div class="component-bar" style="width: {bar_width}%; background: {color};"></div>
                 </div>
-            """, unsafe_allow_html=True)
+                <div class="component-value">{score}%</div>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    # Risk and positive factors
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### ⚠️ Risk Factors")
+        risk_factors = sustainability.get("risk_factors", [])
+        if risk_factors:
+            for factor in risk_factors:
+                st.markdown(f'<div class="factor-item factor-risk">⚠️ {factor}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="factor-item factor-positive">✓ No significant risks identified</div>', unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("#### ✓ Positive Factors")
+        positive_factors = sustainability.get("positive_factors", [])
+        if positive_factors:
+            for factor in positive_factors:
+                st.markdown(f'<div class="factor-item factor-positive">✓ {factor}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="factor-item factor-risk">No positive factors detected</div>', unsafe_allow_html=True)
 
 
-def render_score_breakdown(risk_scores: dict):
-    """Render visual score breakdown."""
-    veg = risk_scores.get('vegetation_score', 0) * 100
-    climate = risk_scores.get('climate_score', 0) * 100
-    sustain = risk_scores.get('sustainability_score', 0) * 100
+def render_ndvi_trend_chart(temporal_data: Dict[str, Any]):
+    """Render NDVI trend chart using Plotly."""
+    monthly_data = temporal_data.get("monthly_data", [])
+    
+    if not monthly_data:
+        st.warning("No temporal data available for chart")
+        return
+    
+    months = [m["month"] for m in monthly_data]
+    ndvi_values = [m["ndvi"] for m in monthly_data]
+    
+    # Create figure
+    fig = go.Figure()
+    
+    # NDVI line
+    fig.add_trace(go.Scatter(
+        x=months,
+        y=ndvi_values,
+        mode='lines+markers',
+        name='NDVI',
+        line=dict(color='#059669', width=3),
+        marker=dict(size=10, color='#059669'),
+        fill='tozeroy',
+        fillcolor='rgba(5, 150, 105, 0.1)'
+    ))
+    
+    # Threshold lines
+    fig.add_hline(y=0.5, line_dash="dash", line_color="#f59e0b", 
+                  annotation_text="Good (0.5)", annotation_position="right")
+    fig.add_hline(y=0.3, line_dash="dash", line_color="#ef4444",
+                  annotation_text="Poor (0.3)", annotation_position="right")
+    
+    fig.update_layout(
+        title="6-Month NDVI Trend Analysis",
+        xaxis_title="Month",
+        yaxis_title="NDVI Score",
+        yaxis=dict(range=[0, 1]),
+        template="plotly_white",
+        height=350,
+        margin=dict(l=20, r=20, t=50, b=20)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Trend summary
+    trend_direction = temporal_data.get("trend_direction", "stable")
+    ndvi_change = temporal_data.get("ndvi_change", 0)
+    
+    if trend_direction == "improving":
+        icon, color = "📈", "#059669"
+    elif trend_direction == "declining":
+        icon, color = "📉", "#dc2626"
+    else:
+        icon, color = "➡️", "#6b7280"
     
     st.markdown(f"""
-        <div style="margin: 1rem 0;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                <span style="font-weight: 600;">Risk Score Composition</span>
-                <span style="color: #059669; font-weight: 700;">{risk_scores.get('composite_score', 0):.0%} Overall</span>
-            </div>
-            <div class="score-bar-container">
-                <div class="score-bar-segment" style="width: 40%; background: #059669;">Veg {veg:.0f}%</div>
-                <div class="score-bar-segment" style="width: 30%; background: #0891b2;">Climate {climate:.0f}%</div>
-                <div class="score-bar-segment" style="width: 30%; background: #7c3aed;">Sustain {sustain:.0f}%</div>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem;">
-                <span>🌿 40% weight</span>
-                <span>🌤️ 30% weight</span>
-                <span>💧 30% weight</span>
-            </div>
+        <div style="text-align: center; padding: 1rem; background: #f9fafb; border-radius: 12px;">
+            <span style="font-size: 1.5rem;">{icon}</span>
+            <span style="font-weight: 600; color: {color}; margin-left: 0.5rem;">
+                Trend: {trend_direction.title()} ({ndvi_change:+.3f})
+            </span>
         </div>
     """, unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
-# Analysis Function
+# Pages
 # ---------------------------------------------------------------------------
-def run_analysis(lat: float, lon: float, context: str, use_multi_agent: bool = False) -> Dict[str, Any]:
-    """Orchestrates the backend services."""
-    if use_multi_agent and MULTI_AGENT_AVAILABLE:
-        return process_loan_with_agents(lat, lon, context)
+
+def page_select_location():
+    """Step 1: Location Selection with Polygon Drawing"""
+    render_progress(1)
     
-    farm_data = satellite_service.get_farm_ndvi(lat, lon)
+    st.markdown(f"""
+        <div class="card">
+            <div class="card-title">📍 {t('select_location_title')}</div>
+            <div class="card-subtitle">{t('select_location_desc')} <strong>Draw your farm boundary for more accurate analysis!</strong></div>
+        </div>
+    """, unsafe_allow_html=True)
     
-    if farm_data.get("error") and "Simulated" not in farm_data.get("status", ""):
-        return {"farm_data": farm_data, "weather_data": None, "llm_result": None}
+    col_map, col_controls = st.columns([1.5, 1], gap="large")
     
+    with col_map:
+        st.markdown("**🗺️ Click to place marker OR draw polygon boundary**")
+        
+        current_lat = st.session_state.get("lat", 20.0)
+        current_lon = st.session_state.get("lon", 0.0)
+        
+        # Create map with drawing tools
+        m = folium.Map(
+            location=[current_lat, current_lon],
+            zoom_start=3 if current_lat == 20.0 else 12,
+            tiles=None
+        )
+        
+        # Base layers
+        folium.TileLayer(
+            tiles='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+            attr='&copy; OpenStreetMap &copy; CARTO',
+            name='Clean Map'
+        ).add_to(m)
+        
+        folium.TileLayer(
+            tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+            attr='Esri',
+            name='Satellite View'
+        ).add_to(m)
+        
+        folium.LayerControl().add_to(m)
+        
+        # Add drawing tools
+        draw = Draw(
+            draw_options={
+                'polygon': {
+                    'shapeOptions': {
+                        'color': '#059669',
+                        'fillColor': '#059669',
+                        'fillOpacity': 0.3
+                    }
+                },
+                'rectangle': {
+                    'shapeOptions': {
+                        'color': '#059669',
+                        'fillColor': '#059669',
+                        'fillOpacity': 0.3
+                    }
+                },
+                'marker': True,
+                'circlemarker': False,
+                'circle': False,
+                'polyline': False
+            },
+            edit_options={'edit': True, 'remove': True}
+        )
+        draw.add_to(m)
+        
+        # Show existing polygon or marker
+        polygon = st.session_state.get("polygon")
+        if polygon and len(polygon) >= 3:
+            folium.Polygon(
+                locations=[[p[1], p[0]] for p in polygon],  # Convert [lon, lat] to [lat, lon]
+                color='#059669',
+                fill=True,
+                fillColor='#059669',
+                fillOpacity=0.3,
+                popup="Farm Boundary"
+            ).add_to(m)
+        elif "lat" in st.session_state and st.session_state.lat != 20.0:
+            folium.Marker(
+                [st.session_state.lat, st.session_state.lon],
+                popup=f"Selected: {st.session_state.lat:.4f}, {st.session_state.lon:.4f}",
+                icon=folium.DivIcon(
+                    html='''
+                        <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%);
+                            width: 36px; height: 36px; border-radius: 50% 50% 50% 0;
+                            transform: rotate(-45deg); display: flex; align-items: center;
+                            justify-content: center; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4);
+                            border: 3px solid white;">
+                            <span style="transform: rotate(45deg); font-size: 16px;">🌱</span>
+                        </div>
+                    ''',
+                    icon_size=(36, 36),
+                    icon_anchor=(18, 36)
+                )
+            ).add_to(m)
+        
+        # Render map
+        map_data = st_folium(
+            m, height=450, width=None, key="location_map",
+            returned_objects=["last_clicked", "all_drawings"]
+        )
+        
+        # Handle map interactions
+        if map_data:
+            # Check for drawn polygon
+            if map_data.get("all_drawings"):
+                drawings = map_data["all_drawings"]
+                for drawing in drawings:
+                    if drawing.get("geometry", {}).get("type") == "Polygon":
+                        coords = drawing["geometry"]["coordinates"][0]
+                        st.session_state.polygon = coords
+                        # Set center point
+                        lats = [c[1] for c in coords]
+                        lons = [c[0] for c in coords]
+                        st.session_state.lat = sum(lats) / len(lats)
+                        st.session_state.lon = sum(lons) / len(lons)
+                        st.rerun()
+            
+            # Handle click (if no polygon)
+            elif map_data.get("last_clicked") and not st.session_state.get("polygon"):
+                clicked_lat = map_data["last_clicked"]["lat"]
+                clicked_lon = map_data["last_clicked"]["lng"]
+                if clicked_lat != st.session_state.get("lat") or clicked_lon != st.session_state.get("lon"):
+                    st.session_state.lat = clicked_lat
+                    st.session_state.lon = clicked_lon
+                    st.rerun()
+    
+    with col_controls:
+        st.markdown(f"**⚡ {t('quick_select')}:**")
+        
+        locations = [
+            ("🇺🇸 Kansas, USA", 37.669, -100.749),
+            ("🇮🇳 Punjab, India", 29.605, 76.273),
+            ("🇧🇷 Goiás, Brazil", -15.826, -47.921),
+            ("🇰🇪 Nairobi, Kenya", -1.286, 36.817),
+        ]
+        
+        for name, lat, lon in locations:
+            if st.button(name, key=f"loc_{name}", use_container_width=True):
+                st.session_state.lat = lat
+                st.session_state.lon = lon
+                st.session_state.polygon = None  # Clear polygon for preset
+                st.rerun()
+        
+        st.markdown("---")
+        
+        # Show selection status
+        if st.session_state.get("polygon"):
+            polygon = st.session_state.polygon
+            area_approx = abs((polygon[0][0] - polygon[2][0]) * (polygon[0][1] - polygon[2][1])) * 111000 * 111000 / 10000
+            st.success(f"""
+                **🗺️ Farm Boundary Drawn**
+                - Points: {len(polygon)}
+                - Approx Area: {area_approx:.1f} hectares
+                - Center: {st.session_state.lat:.4f}, {st.session_state.lon:.4f}
+            """)
+            
+            if st.button("🗑️ Clear Boundary", use_container_width=True):
+                st.session_state.polygon = None
+                st.rerun()
+        elif "lat" in st.session_state and st.session_state.lat != 20.0:
+            st.success(f"**📍 Point Selected:** {st.session_state.lat:.4f}, {st.session_state.lon:.4f}")
+            st.info("💡 Tip: Draw a polygon for more accurate analysis!")
+        else:
+            st.info("Click on map or draw a polygon to select your farm")
+        
+        st.markdown("---")
+        
+        # Next button
+        can_proceed = ("lat" in st.session_state and st.session_state.lat != 20.0)
+        if st.button(f"{t('continue')} →", type="primary", use_container_width=True, disabled=not can_proceed):
+            st.session_state.step = 2
+            st.rerun()
+
+
+def page_loan_details():
+    """Step 2: Loan Details"""
+    render_progress(2)
+    
+    st.markdown(f"""
+        <div class="card">
+            <div class="card-title">💰 {t('loan_purpose_title')}</div>
+            <div class="card-subtitle">{t('loan_purpose_desc')}</div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Loan amount
+    loan_amount = st.slider(
+        "Loan Amount (USD)",
+        min_value=100,
+        max_value=10000,
+        value=st.session_state.get("loan_amount", 500),
+        step=100
+    )
+    st.session_state.loan_amount = loan_amount
+    
+    # Purpose presets with sustainability indicators
+    st.markdown("**Select Purpose (Sustainable options marked ✓):**")
+    
+    purposes = [
+        ("✓ 💧 Drip Irrigation", "Install drip irrigation system for water efficiency", True),
+        ("✓ ☀️ Solar Pump", "Solar-powered water pump for sustainable energy", True),
+        ("✓ 🌿 Organic Inputs", "Purchase organic fertilizers and pest control", True),
+        ("✓ 🔄 Crop Rotation", "Implement crop rotation for soil health", True),
+        ("🚜 Equipment", "Purchase general farming equipment", False),
+        ("🌾 Seeds & Supplies", "Buy seeds and farming supplies", False),
+    ]
+    
+    cols = st.columns(3)
+    for i, (label, desc, sustainable) in enumerate(purposes):
+        with cols[i % 3]:
+            btn_type = "primary" if sustainable else "secondary"
+            if st.button(label, key=f"purpose_{i}", use_container_width=True, type=btn_type):
+                st.session_state.loan_purpose = desc
+    
+    st.markdown("---")
+    
+    # Custom input
+    purpose = st.text_area(
+        t('loan_purpose_label'),
+        value=st.session_state.get("loan_purpose", ""),
+        placeholder=t('loan_purpose_placeholder'),
+        height=100
+    )
+    st.session_state.loan_purpose = purpose
+    
+    # Navigation
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button(f"← {t('back')}", use_container_width=True):
+            st.session_state.step = 1
+            st.rerun()
+    with col2:
+        if st.button(f"{t('analyze')} →", type="primary", use_container_width=True, disabled=not purpose):
+            st.session_state.step = 3
+            st.rerun()
+
+
+def page_processing():
+    """Step 3: Enhanced Processing with Multi-Temporal Analysis"""
+    render_progress(3)
+    
+    st.markdown(f"""
+        <div class="card">
+            <div style="text-align: center; padding: 1rem;">
+                <div style="font-size: 3rem;">🔬</div>
+                <div style="font-size: 1.25rem; font-weight: 600; margin: 0.5rem 0;">{t('processing_title')}</div>
+                <div style="color: #6b7280;">Enhanced Multi-Temporal Analysis</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    progress_bar = st.progress(0)
+    status_placeholder = st.empty()
+    
+    lat = st.session_state.lat
+    lon = st.session_state.lon
+    polygon = st.session_state.get("polygon")
+    purpose = st.session_state.loan_purpose
+    loan_amount = st.session_state.get("loan_amount", 500)
+    
+    def update_status(icon, text, progress_val):
+        status_placeholder.markdown(f"""
+            <div style="background: #f0fdf4; border-left: 4px solid #059669; padding: 0.75rem 1rem; border-radius: 0 8px 8px 0; margin: 0.5rem 0;">
+                <span style="margin-right: 0.5rem;">{icon}</span>
+                <span style="color: #065f46;">{text}</span>
+            </div>
+        """, unsafe_allow_html=True)
+        # Using a custom colored progress bar is hard with st.progress, but the theme will handle it
+        progress_bar.progress(progress_val)
+        time.sleep(0.3)
+    
+    # ========== ANALYSIS STEPS ==========
+    
+    # Step 1: Multi-temporal NDVI
+    update_status("🛰️", "Fetching 6 months of satellite imagery...", 0.05)
+    temporal_data = get_multi_temporal_ndvi(lat, lon, months_back=6, polygon=polygon)
+    update_status("📊", f"Analyzed {temporal_data.get('months_analyzed', 0)} months of NDVI data", 0.25)
+    
+    # Step 2: Deforestation check
+    update_status("🌳", "Checking for recent deforestation...", 0.30)
+    deforestation_data = check_deforestation(lat, lon, years_back=2, polygon=polygon)
+    deforest_status = "✅ No deforestation" if not deforestation_data.get("deforestation_detected") else "⚠️ Potential clearing detected"
+    update_status("🌲", deforest_status, 0.45)
+    
+    # Step 3: Weather analysis
+    update_status("🌤️", "Analyzing 90-day climate data...", 0.50)
     weather_data = weather_service.get_weather_analysis(lat, lon)
-    combined_data = {**farm_data, "weather": weather_data}
-    llm_result = llm_service.analyze_loan_risk(combined_data, user_request=context)
+    update_status("☁️", f"Weather risk: {weather_data.get('weather_status', 'Unknown')}", 0.60)
     
-    return {"farm_data": farm_data, "weather_data": weather_data, "llm_result": llm_result}
+    # Step 4: Calculate sustainability score
+    update_status("♻️", "Computing sustainability score...", 0.65)
+    sustainability = calculate_sustainability_score(temporal_data, deforestation_data, weather_data)
+    update_status("📈", f"Sustainability: {sustainability.get('overall_score', 0)}/100 (Grade {sustainability.get('grade', 'N/A')})", 0.75)
+    
+    # Step 5: Calculate loan risk
+    update_status("💰", "Calculating loan risk...", 0.80)
+    loan_risk = calculate_loan_risk_score(sustainability, loan_amount, purpose)
+    update_status("🏦", f"Risk Score: {loan_risk.get('risk_score', 0)}/100", 0.85)
+    
+    # Step 6: AI Analysis
+    update_status("🤖", "Generating AI recommendations...", 0.90)
+    current_lang = st.session_state.get("language", "en")
+    
+    combined_data = {
+        "ndvi_score": temporal_data.get("ndvi_current", 0.5),
+        "ndvi_trend": temporal_data.get("trend_direction", "stable"),
+        "sustainability_score": sustainability.get("overall_score", 50),
+        "sustainability_grade": sustainability.get("grade", "C"),
+        "deforestation_risk": deforestation_data.get("risk_level", "none"),
+        "weather": weather_data,
+        "risk_factors": sustainability.get("risk_factors", []),
+        "positive_factors": sustainability.get("positive_factors", [])
+    }
+    
+    try:
+        llm_result = llm_service.analyze_loan_risk(combined_data, user_request=purpose, language=current_lang)
+    except Exception as e:
+        # Fallback to rule-based decision
+        score = sustainability.get("overall_score", 50)
+        if score >= 65:
+            decision = "APPROVED"
+        elif score >= 45:
+            decision = "CONDITIONAL"
+        else:
+            decision = "REJECTED"
+        
+        llm_result = {
+            "decision": decision,
+            "confidence": score / 100,
+            "reasoning": f"Based on sustainability score of {score}/100",
+            "recommendations": loan_risk.get("decision_factors", []),
+            "model_used": "rule-based-fallback"
+        }
+    
+    update_status("✅", "Analysis complete!", 1.0)
+    
+    # Store results
+    st.session_state.result = {
+        "temporal_data": temporal_data,
+        "deforestation_data": deforestation_data,
+        "weather_data": weather_data,
+        "sustainability": sustainability,
+        "loan_risk": loan_risk,
+        "llm_result": llm_result
+    }
+    
+    time.sleep(0.5)
+    st.session_state.step = 4
+    st.rerun()
+
+
+def page_results():
+    """Step 4: Enhanced Results with Full Breakdown"""
+    render_progress(4)
+    
+    result = st.session_state.result
+    temporal_data = result.get("temporal_data", {})
+    deforestation_data = result.get("deforestation_data", {})
+    weather = result.get("weather_data", {})
+    sustainability = result.get("sustainability", {})
+    loan_risk = result.get("loan_risk", {})
+    llm = result.get("llm_result", {})
+    
+    decision = llm.get("decision", "PENDING")
+    confidence = llm.get("confidence", 0)
+    
+    # Decision Hero
+    if "APPROVED" in decision:
+        icon, title, css_class = "🎉", t('approved'), "approved"
+        st.balloons()
+    elif "CONDITIONAL" in decision:
+        icon, title, css_class = "⚡", t('conditional'), "conditional"
+    else:
+        icon, title, css_class = "😔", t('rejected'), "rejected"
+    
+    st.markdown(f"""
+        <div class="result-hero">
+            <div class="result-icon">{icon}</div>
+            <div class="result-title {css_class}">{title}</div>
+            <div style="margin-top: 0.5rem;">
+                <span style="background: #f3f4f6; padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.9rem;">
+                    Confidence: {confidence:.0%} | Risk Score: {loan_risk.get('risk_score', 0)}/100
+                </span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Loan Terms (if approved)
+    if "APPROVED" in decision or "CONDITIONAL" in decision:
+        st.markdown("### 💰 Recommended Loan Terms")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Interest Rate", loan_risk.get("suggested_interest_rate_pct", "N/A"))
+        with col2:
+            st.metric("Max Amount", f"${loan_risk.get('max_recommended_amount', 0):,.0f}")
+        with col3:
+            st.metric("Approval Likelihood", loan_risk.get("approval_likelihood", "N/A").title())
+    
+    # Tabs for detailed analysis
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Sustainability Score", "📈 NDVI Trend", "🌳 Deforestation", "🤖 AI Analysis"])
+    
+    with tab1:
+        render_sustainability_score(sustainability)
+    
+    with tab2:
+        render_ndvi_trend_chart(temporal_data)
+        
+        # Additional metrics
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Current NDVI", f"{temporal_data.get('ndvi_current', 0):.3f}")
+        with col2:
+            st.metric("6-Month Avg", f"{temporal_data.get('ndvi_average', 0):.3f}")
+        with col3:
+            st.metric("Change", f"{temporal_data.get('ndvi_change', 0):+.3f}")
+        with col4:
+            st.metric("Consistency", f"{temporal_data.get('consistency_score', 0):.0%}")
+    
+    with tab3:
+        deforest_detected = deforestation_data.get("deforestation_detected", False)
+        
+        if deforest_detected:
+            st.error("⚠️ Potential Deforestation Detected")
+        else:
+            st.success("✅ No Deforestation Detected")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Historical NDVI", f"{deforestation_data.get('ndvi_historical', 0):.3f}")
+        with col2:
+            st.metric("Recent NDVI", f"{deforestation_data.get('ndvi_recent', 0):.3f}")
+        with col3:
+            st.metric("Change", f"{deforestation_data.get('change_detected', 0):+.3f}")
+        
+        st.info(f"Analysis Period: {deforestation_data.get('analysis_period', 'N/A')}")
+    
+    with tab4:
+        st.markdown("### AI Reasoning")
+        st.markdown(llm.get("reasoning", "No analysis available."))
+        
+        if llm.get("recommendations"):
+            st.markdown("### Recommendations")
+            for rec in llm["recommendations"]:
+                st.markdown(f"• {rec}")
+        
+        st.caption(f"Model: {llm.get('model_used', 'Unknown')}")
+    
+    # Certificate
+    if "APPROVED" in decision or "CONDITIONAL" in decision:
+        farm_data = {"ndvi_score": temporal_data.get("ndvi_current", 0.5), "status": "Verified"}
+        tx_hash = generate_blockchain_hash(farm_data, llm)
+        
+        st.markdown(f"""
+            <div class="cert-box">
+                <div class="cert-title">🔐 Blockchain Verification Hash</div>
+                <div class="cert-hash">{tx_hash}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        try:
+            pdf_path, _ = create_green_certificate(farm_data, llm)
+            with open(pdf_path, "rb") as f:
+                st.download_button(
+                    f"📄 {t('download_certificate')}",
+                    data=f,
+                    file_name="GreenChain_Certificate.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+        except Exception as e:
+            st.warning(f"Certificate generation unavailable: {e}")
+    
+    st.markdown("---")
+    
+    # Start over
+    if st.button(f"🔄 {t('new_application')}", use_container_width=True):
+        for key in ["step", "lat", "lon", "loan_purpose", "loan_amount", "result", "polygon"]:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
 
 
 # ---------------------------------------------------------------------------
-# Main Application
+# Main App
 # ---------------------------------------------------------------------------
 def main():
     setup_page()
-
-    # Session State
-    if "lat" not in st.session_state: st.session_state.lat = 37.669
-    if "lon" not in st.session_state: st.session_state.lon = -100.749
-    if "analysis_result" not in st.session_state: st.session_state.analysis_result = None
-    if "current_step" not in st.session_state: st.session_state.current_step = 1
-
-    # Hero Header
-    render_hero()
     
-    # Determine current step
-    current_step = 1
-    if st.session_state.analysis_result:
-        current_step = 4
+    if "language" not in st.session_state:
+        st.session_state.language = "en"
     
-    # Step Indicators
-    render_step_indicators(current_step)
+    if "step" not in st.session_state:
+        st.session_state.step = 1
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    render_language_selector()
+    render_brand()
     
-    # Main Layout
-    col_left, col_right = st.columns([1.2, 1.8], gap="large")
+    step = st.session_state.step
     
-    # =========================================================================
-    # LEFT COLUMN - Controls
-    # =========================================================================
-    with col_left:
-        # Location Selection Card
-        with st.container(border=True):
-            st.markdown("#### 📍 Farm Location")
-            
-            # Quick location buttons
-            st.markdown("**Quick Select:**")
-            loc_cols = st.columns(3)
-            
-            sample_locations = [
-                ("🇺🇸 Kansas", 37.669, -100.749),
-                ("🇮🇳 Punjab", 29.605, 76.273),
-                ("🇧🇷 Brazil", -15.826, -47.921),
-            ]
-            
-            for col, (name, lat, lon) in zip(loc_cols, sample_locations):
-                with col:
-                    if st.button(name, use_container_width=True, key=f"loc_{name}"):
-                        st.session_state.lat = lat
-                        st.session_state.lon = lon
-                        st.session_state.analysis_result = None
-                        st.rerun()
-            
-            st.markdown("---")
-            
-            # Manual coordinate input
-            col_lat, col_lon = st.columns(2)
-            with col_lat:
-                new_lat = st.number_input("Latitude", value=st.session_state.lat, 
-                                          format="%.4f", min_value=-90.0, max_value=90.0)
-            with col_lon:
-                new_lon = st.number_input("Longitude", value=st.session_state.lon,
-                                          format="%.4f", min_value=-180.0, max_value=180.0)
-            
-            if new_lat != st.session_state.lat or new_lon != st.session_state.lon:
-                st.session_state.lat = new_lat
-                st.session_state.lon = new_lon
-                st.session_state.analysis_result = None
-        
-        # Configuration Card
-        with st.container(border=True):
-            st.markdown("#### ⚙️ Analysis Settings")
-            
-            # Multi-Agent Toggle (prominent)
-            use_multi_agent = st.toggle(
-                "🤖 **Multi-Agent System**",
-                value=True,
-                help="Uses 3 specialized AI agents: Field Scout, Risk Analyst, and Loan Officer"
-            )
-            
-            col_mock1, col_mock2 = st.columns(2)
-            with col_mock1:
-                mock_mode = st.toggle("⚡ Fast Mode", value=True, help="Use simulated data for quick demo")
-            with col_mock2:
-                mock_llm = st.toggle("🧠 Mock AI", value=True, help="Skip API call (no key needed)")
-            
-            satellite_service.MOCK_MODE = mock_mode
-            weather_service.MOCK_MODE = mock_mode
-            llm_service.MOCK_MODE = mock_llm
-            
-            st.markdown("---")
-            
-            loan_purpose = st.text_area(
-                "💰 Loan Purpose",
-                value="Expansion of organic wheat farming with drip irrigation system installation.",
-                height=80
-            )
-            
-            # Big Run Button
-            st.markdown("<br>", unsafe_allow_html=True)
-            run_btn = st.button(
-                "🚀 **Run Verification Analysis**",
-                type="primary",
-                use_container_width=True
-            )
-    
-    # =========================================================================
-    # RIGHT COLUMN - Map & Results
-    # =========================================================================
-    with col_right:
-        # Interactive Map
-        with st.container(border=True):
-            st.markdown("#### 🗺️ Farm Location Preview")
-            
-            m = folium.Map(
-                location=[st.session_state.lat, st.session_state.lon],
-                zoom_start=12,
-                tiles="OpenStreetMap"
-            )
-            
-            # Add satellite tile layer option
-            folium.TileLayer(
-                tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                attr='Esri',
-                name='Satellite',
-                overlay=False
-            ).add_to(m)
-            
-            folium.TileLayer('OpenStreetMap', name='Street Map').add_to(m)
-            folium.LayerControl().add_to(m)
-            
-            # Farm marker with popup
-            popup_html = f"""
-                <div style="font-family: Inter, sans-serif; min-width: 150px;">
-                    <b>🌱 Target Farm</b><br>
-                    <small>Lat: {st.session_state.lat:.4f}</small><br>
-                    <small>Lon: {st.session_state.lon:.4f}</small>
-                </div>
-            """
-            
-            folium.Marker(
-                [st.session_state.lat, st.session_state.lon],
-                popup=folium.Popup(popup_html, max_width=200),
-                icon=folium.Icon(color="green", icon="leaf", prefix="fa"),
-                tooltip="Click for details"
-            ).add_to(m)
-            
-            # Add a circle to show analysis area
-            folium.Circle(
-                [st.session_state.lat, st.session_state.lon],
-                radius=500,
-                color='#059669',
-                fill=True,
-                fillOpacity=0.1,
-                weight=2,
-                tooltip="Analysis Area (500m radius)"
-            ).add_to(m)
-            
-            map_data = st_folium(m, height=350, width=None, key="main_map", returned_objects=[])
-    
-    # =========================================================================
-    # ANALYSIS EXECUTION
-    # =========================================================================
-    if run_btn:
-        with st.container(border=True):
-            st.markdown("### 🔄 Analysis in Progress")
-            
-            if use_multi_agent:
-                render_agent_pipeline([], is_running=True)
-                
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                # Simulate staged progress for better UX
-                stages = [
-                    (0.33, "🛰️ Field Scout: Acquiring satellite imagery..."),
-                    (0.66, "📊 Risk Analyst: Computing sustainability scores..."),
-                    (1.0, "🏦 Loan Officer: Generating decision...")
-                ]
-                
-                for progress, message in stages:
-                    status_text.markdown(f"**{message}**")
-                    time.sleep(0.3)
-                    progress_bar.progress(progress)
-            else:
-                with st.spinner("Processing..."):
-                    time.sleep(0.5)
-            
-            # Run the actual analysis
-            result = run_analysis(
-                st.session_state.lat,
-                st.session_state.lon,
-                loan_purpose,
-                use_multi_agent
-            )
-            
-            if result["farm_data"].get("error") and "Simulated" not in result["farm_data"].get("status", ""):
-                st.error(f"❌ Analysis failed: {result['farm_data']['error']}")
-            else:
-                st.session_state.analysis_result = result
-                st.session_state.used_multi_agent = use_multi_agent
-                st.rerun()
-    
-    # =========================================================================
-    # RESULTS DISPLAY
-    # =========================================================================
-    if st.session_state.analysis_result:
-        res = st.session_state.analysis_result
-        farm = res["farm_data"]
-        weather = res.get("weather_data", {})
-        llm = res["llm_result"]
-        decision = llm.get('decision', 'PENDING')
-        confidence = llm.get('confidence', 0)
-        
-        st.markdown("---")
-        st.markdown("## 📊 Verification Results")
-        
-        # Decision Card (Most Important - Top)
-        render_decision_card(decision, confidence)
-        
-        # Celebration for approved
-        if "APPROVED" in decision:
-            st.balloons()
-        
-        # Key Metrics Row
-        st.markdown("### 📈 Key Indicators")
-        metrics = [
-            ("NDVI Score", f"{farm.get('ndvi_score', 0):.2f}", "🌿"),
-            ("Vegetation", farm.get('status', 'N/A'), "🌾"),
-            ("Weather Risk", f"{weather.get('weather_risk_score', 0):.0%}" if weather else "N/A", "🌤️"),
-            ("Confidence", f"{confidence:.0%}", "🎯")
-        ]
-        render_metric_row(metrics)
-        
-        # Multi-Agent Section
-        if st.session_state.get("used_multi_agent") and res.get("agent_trace"):
-            st.markdown("### 🤖 Agent Workflow")
-            render_agent_pipeline(res.get("agent_trace", []))
-            
-            if res.get("risk_scores"):
-                render_score_breakdown(res["risk_scores"])
-        
-        # Detailed Analysis Tabs
-        st.markdown("### 📋 Detailed Analysis")
-        tab1, tab2, tab3 = st.tabs(["🧠 AI Reasoning", "🌤️ Climate Data", "🔐 Certificate"])
-        
-        with tab1:
-            with st.container(border=True):
-                st.markdown(llm.get('reasoning', 'No reasoning available.'))
-                
-                if llm.get('recommendations'):
-                    st.markdown("**📌 Recommendations:**")
-                    for rec in llm['recommendations']:
-                        st.markdown(f"- {rec}")
-        
-        with tab2:
-            if weather and not weather.get("error"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("🌧️ Total Rainfall", f"{weather.get('rainfall_total_mm', 'N/A')} mm")
-                    st.metric("🌡️ Avg Temperature", f"{weather.get('temperature_avg_c', 'N/A')}°C")
-                    st.metric("📅 Data Period", f"{weather.get('data_period', {}).get('days', 90)} days")
-                with col2:
-                    st.metric("☀️ Drought Risk", f"{weather.get('drought_risk_score', 0):.0%}")
-                    st.metric("❄️ Frost Days", weather.get('frost_days', 'N/A'))
-                    st.metric("🌱 Growing Degree Days", weather.get('growing_degree_days', 'N/A'))
-            else:
-                st.info("Weather data not available for this analysis.")
-        
-        with tab3:
-            if "APPROVED" in decision or "CONDITIONAL" in decision:
-                # Generate blockchain hash
-                tx_hash = generate_blockchain_hash(farm, llm)
-                
-                st.markdown("**⛓️ Blockchain Verification**")
-                st.markdown(f'<div class="blockchain-hash">{tx_hash}</div>', unsafe_allow_html=True)
-                
-                st.markdown("**📜 Green Certificate**")
-                st.info("Your sustainable farming verification is ready for download.")
-                
-                # Generate and offer PDF
-                try:
-                    pdf_path, _ = create_green_certificate(farm, llm)
-                    with open(pdf_path, "rb") as f:
-                        st.download_button(
-                            label="📥 Download Certificate (PDF)",
-                            data=f,
-                            file_name="GreenChain_Verification_Certificate.pdf",
-                            mime="application/pdf",
-                            type="primary",
-                            use_container_width=True
-                        )
-                except Exception as e:
-                    st.error(f"Certificate generation failed: {e}")
-            else:
-                st.warning("Certificate is only available for approved or conditionally approved applications.")
-        
-        # Reset Button
-        st.markdown("---")
-        if st.button("🔄 Start New Analysis", use_container_width=True):
-            st.session_state.analysis_result = None
-            st.rerun()
+    if step == 1:
+        page_select_location()
+    elif step == 2:
+        page_loan_details()
+    elif step == 3:
+        page_processing()
+    elif step == 4:
+        page_results()
 
 
 if __name__ == "__main__":
