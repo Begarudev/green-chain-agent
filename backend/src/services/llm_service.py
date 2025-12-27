@@ -124,8 +124,8 @@ CONFIDENCE: [0-1 decimal]
 REASONING: [Your detailed analysis covering both vegetation and climate factors]
 RECOMMENDATIONS: [List any recommendations, or "None" if approved]"""
 
-    # Make request to Gemini API
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+    # Make request to Gemini API (using gemini-2.0-flash)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
 
     headers = {
         "Content-Type": "application/json"
@@ -191,7 +191,7 @@ RECOMMENDATIONS: [List any recommendations, or "None" if approved]"""
             "reasoning": reasoning,
             "confidence": confidence,
             "raw_response": assistant_message,
-            "model_used": "gemini-pro",
+            "model_used": "gemini-2.0-flash",
             "recommendations": recommendations
         }
 
