@@ -12,9 +12,23 @@ from typing import Dict, Any, Optional
 MOCK_MODE = False
 
 
+# Language names for prompts
+LANGUAGE_NAMES = {
+    "en": "English",
+    "es": "Spanish",
+    "hi": "Hindi",
+    "pt": "Portuguese",
+    "fr": "French",
+    "sw": "Swahili",
+    "zh": "Chinese (Simplified)",
+    "ar": "Arabic",
+}
+
+
 def analyze_loan_risk(
     farm_data: Dict[str, Any],
-    user_request: Optional[str] = None
+    user_request: Optional[str] = None,
+    language: str = "en"
 ) -> Dict[str, Any]:
     """
     Analyze loan risk based on farm NDVI data using Google Gemini API.
@@ -22,6 +36,7 @@ def analyze_loan_risk(
     Args:
         farm_data: Dictionary containing NDVI score and status from satellite_service
         user_request: Optional user-provided context or request details
+        language: Language code for response (en, es, hi, pt, fr, sw, zh, ar)
 
     Returns:
         Dictionary containing loan decision and analysis:
@@ -32,6 +47,7 @@ def analyze_loan_risk(
             "recommendations": list[str]
         }
     """
+    lang_name = LANGUAGE_NAMES.get(language, "English")
 
     # --- MOCK MODE (FAST PATH) ---
     if MOCK_MODE:
@@ -99,6 +115,11 @@ Weather & Climate Data (Last {weather.get('data_period', {}).get('days', 90)} da
 - Weather Status: {weather.get('weather_status', 'Unknown')}
 """
 
+    # Language instruction
+    lang_instruction = ""
+    if language != "en":
+        lang_instruction = f"""\n\nIMPORTANT: You MUST respond in {lang_name}. Write the REASONING and RECOMMENDATIONS sections entirely in {lang_name}. Only keep DECISION as APPROVED/REJECTED/CONDITIONAL in English for parsing.\n"""
+
     prompt = f"""You are a Sustainable Credit Officer specializing in agricultural micro-loans.
 
 Analyze the satellite vegetation data AND weather/climate data provided to make a comprehensive loan decision.
@@ -117,12 +138,12 @@ Decision Guidelines:
 - If NDVI < 0.3 OR weather shows severe drought/frost risk, consider REJECTION
 - For borderline cases, provide CONDITIONAL approval with specific recommendations
 - Factor in drought risk, frost days, and rainfall adequacy
-
+{lang_instruction}
 Provide your analysis in this exact format:
 DECISION: [APPROVED/REJECTED/CONDITIONAL]
 CONFIDENCE: [0-1 decimal]
-REASONING: [Your detailed analysis covering both vegetation and climate factors]
-RECOMMENDATIONS: [List any recommendations, or "None" if approved]"""
+REASONING: [Your detailed analysis covering both vegetation and climate factors{f' - respond in {lang_name}' if language != 'en' else ''}]
+RECOMMENDATIONS: [List any recommendations, or "None" if approved{f' - respond in {lang_name}' if language != 'en' else ''}]"""
 
     # Make request to Gemini API (using gemini-2.0-flash)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"

@@ -901,8 +901,11 @@ def page_processing():
     show_status("🤖", t('step_sending_ai'))
     show_status("💭", t('step_ai_evaluating'))
     
+    # Get current language for AI response
+    current_lang = st.session_state.get("language", "en")
+    
     try:
-        llm_result = llm_service.analyze_loan_risk(combined_data, user_request=purpose)
+        llm_result = llm_service.analyze_loan_risk(combined_data, user_request=purpose, language=current_lang)
         decision = llm_result.get('decision', 'PENDING')
         confidence = llm_result.get('confidence', 0)
         model = llm_result.get('model_used', 'unknown')
