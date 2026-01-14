@@ -1016,7 +1016,12 @@ def render_decision_panel(app):
     
     with col4:
         if st.button("↻ RE-ANALYZE", key="reanalyze_btn", use_container_width=True):
-            st.info("Triggering re-analysis...")
+            # Clear cached analysis to force re-analysis
+            ai_analysis_key = f"ai_analysis_{app['id']}"
+            if ai_analysis_key in st.session_state:
+                del st.session_state[ai_analysis_key]
+            st.info("Triggering re-analysis with RAG...")
+            st.rerun()
     
     st.markdown("</div></div>", unsafe_allow_html=True)
 
@@ -1095,6 +1100,131 @@ def render_function_keys():
             <span class="func-key">F8 SETTINGS</span>
         </div>
     """, unsafe_allow_html=True)
+
+
+def render_analytics_result(result: Dict[str, Any]):
+    """Render analytics command results."""
+    result_type = result.get("type")
+    data = result.get("data", {})
+    
+    if result_type == "portfolio":
+        st.markdown("""
+            <div class="bb-panel">
+                <div class="bb-panel-header">
+                    <span class="bb-panel-title">📊 Portfolio Statistics</span>
+                </div>
+                <div class="bb-panel-body">
+        """, unsafe_allow_html=True)
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Applications", data.get("total_applications", 0))
+        with col2:
+            st.metric("Approved", data.get("approved", 0))
+        with col3:
+            st.metric("Total Disbursed", f"${data.get('total_disbursed', 0):,.0f}")
+        with col4:
+            st.metric("Avg Sustainability", f"{data.get('avg_sustainability', 0):.1f}")
+        
+        st.markdown("</div></div>", unsafe_allow_html=True)
+    
+    elif result_type == "region":
+        st.markdown("""
+            <div class="bb-panel">
+                <div class="bb-panel-header">
+                    <span class="bb-panel-title">🌍 Regional Analysis</span>
+                </div>
+                <div class="bb-panel-body">
+        """, unsafe_allow_html=True)
+        
+        regions = data.get("regions", {})
+        for region, stats in regions.items():
+            st.markdown(f"**{region}**")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Applications", stats.get("count", 0))
+            with col2:
+                st.metric("Approval Rate", f"{stats.get('approval_rate', 0):.1f}%")
+            with col3:
+                st.metric("Avg Sustainability", f"{stats.get('avg_sustainability', 0):.1f}")
+        
+        st.markdown("</div></div>", unsafe_allow_html=True)
+    
+    elif result_type == "trend":
+        st.markdown("""
+            <div class="bb-panel">
+                <div class="bb-panel-header">
+                    <span class="bb-panel-title">📈 Trend Analysis</span>
+                </div>
+                <div class="bb-panel-body">
+        """, unsafe_allow_html=True)
+        
+        metric = data.get("metric", "sustainability")
+        trends = data.get("trends", [])
+        periods = data.get("periods", [])
+        
+        if trends and periods:
+            import plotly.graph_objects as go
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=periods,
+                y=trends,
+                mode='lines+markers',
+                line=dict(color='#00ff88', width=2),
+                name=metric.title()
+            ))
+            fig.update_layout(
+                title=f"{metric.title()} Trend",
+                template="plotly_dark",
+                paper_bgcolor="#111111",
+                plot_bgcolor="#0a0a0a",
+                height=300,
+                font=dict(family="JetBrains Mono", color="#888")
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("</div></div>", unsafe_allow_html=True)
+    
+    elif result_type == "carbon":
+        st.markdown("""
+            <div class="bb-panel">
+                <div class="bb-panel-header">
+                    <span class="bb-panel-title">🌱 Carbon Impact</span>
+                </div>
+                <div class="bb-panel-body">
+        """, unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Loans", data.get("total_loans", 0))
+        with col2:
+            st.metric("Carbon Offset", f"{data.get('total_carbon_offset_tons', 0):.2f} tons CO2")
+        with col3:
+            st.metric("Equivalent Trees", f"{data.get('equivalent_trees', 0):.0f}")
+        
+        st.markdown("</div></div>", unsafe_allow_html=True)
+    
+    elif result_type == "compliance":
+        st.markdown("""
+            <div class="bb-panel">
+                <div class="bb-panel-header">
+                    <span class="bb-panel-title">✅ Compliance Audit</span>
+                </div>
+                <div class="bb-panel-body">
+        """, unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Audited", data.get("total_audited", 0))
+        with col2:
+            st.metric("Compliant", data.get("compliant", 0))
+        with col3:
+            st.metric("Compliance Rate", f"{data.get('compliance_rate', 0):.1f}%")
+        
+        if data.get("issues"):
+            st.warning("Issues found: " + ", ".join(data.get("issues", [])))
+        
+        st.markdown("</div></div>", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1180,36 +1310,159 @@ def main():
                         <div class="bb-panel-body">
                 """, unsafe_allow_html=True)
                 
-                if app["sustainability_score"] >= 70:
-                    st.markdown("""
+                # Generate AI analysis if not already cached
+                ai_analysis_key = f"ai_analysis_{app['id']}"
+                if ai_analysis_key not in st.session_state:
+                    try:
+                        from services import llm_service
+                        from services.rag_service import get_compliance_context, get_index
+                        from services.analysis_service import generate_metric_explanations
+                        
+                        # Prepare data for analysis
+                        combined_data = {
+                            "ndvi_score": app.get("ndvi_current", 0.5),
+                            "ndvi_trend": app.get("ndvi_trend", "stable"),
+                            "sustainability_score": app.get("sustainability_score", 50),
+                            "deforestation_risk": "high" if app.get("deforestation", False) else "none",
+                            "weather": {},
+                            "risk_factors": [],
+                            "positive_factors": []
+                        }
+                        
+                        # Get RAG context
+                        regulatory_context = None
+                        try:
+                            pinecone_index = get_index()
+                            regulatory_context_data = get_compliance_context(
+                                loan_purpose=app.get("purpose", ""),
+                                sustainability_score=app.get("sustainability_score", 50),
+                                geographic_region=app.get("location", ""),
+                                index=pinecone_index
+                            )
+                            if regulatory_context_data:
+                                regulatory_context = regulatory_context_data.get("formatted_context")
+                        except Exception as e:
+                            print(f"[RAG] Error: {str(e)}")
+                        
+                        # Get AI analysis with RAG
+                        llm_result = llm_service.analyze_loan_risk(
+                            combined_data,
+                            user_request=app.get("purpose", ""),
+                            language="en",
+                            regulatory_context=regulatory_context
+                        )
+                        
+                        # Get metric explanations
+                        metrics_for_analysis = {
+                            "sustainability_score": app.get("sustainability_score", 50),
+                            "ndvi_current": app.get("ndvi_current", 0.5),
+                            "ndvi_trend": app.get("ndvi_trend", "stable"),
+                            "risk_score": app.get("risk_score", 0),
+                            "weather_data": {}
+                        }
+                        metric_explanations = generate_metric_explanations(metrics_for_analysis)
+                        
+                        st.session_state[ai_analysis_key] = {
+                            "llm_result": llm_result,
+                            "metric_explanations": metric_explanations,
+                            "regulatory_context": regulatory_context_data
+                        }
+                    except Exception as e:
+                        print(f"[AI Analysis] Error: {str(e)}")
+                        # Fallback to simple logic
+                        score = app.get("sustainability_score", 50)
+                        if score >= 70:
+                            decision = "APPROVED"
+                            reasoning = "Strong sustainability indicators."
+                        elif score >= 50:
+                            decision = "CONDITIONAL"
+                            reasoning = "Moderate sustainability score."
+                        else:
+                            decision = "REJECTED"
+                            reasoning = "Low sustainability score."
+                        
+                        st.session_state[ai_analysis_key] = {
+                            "llm_result": {
+                                "decision": decision,
+                                "reasoning": reasoning,
+                                "confidence": score / 100,
+                                "recommendations": []
+                            },
+                            "metric_explanations": None,
+                            "regulatory_context": None
+                        }
+                
+                # Display AI analysis
+                ai_data = st.session_state.get(ai_analysis_key, {})
+                llm_result = ai_data.get("llm_result", {})
+                decision = llm_result.get("decision", "PENDING")
+                reasoning = llm_result.get("reasoning", "")
+                confidence = llm_result.get("confidence", 0)
+                recommendations = llm_result.get("recommendations", [])
+                compliance_citations = llm_result.get("compliance_citations", [])
+                regulatory_context_data = ai_data.get("regulatory_context")
+                
+                # Show RAG status
+                if regulatory_context_data:
+                    rag_status = "✅ RAG Context Retrieved" if regulatory_context_data.get("context") else "⚠️ Limited RAG Context"
+                    st.caption(rag_status)
+                
+                # Update application status based on AI decision (if different)
+                if decision != app.get("status") and decision != "PENDING":
+                    app["status"] = decision
+                
+                # Decision banner
+                if "APPROVED" in decision:
+                    st.markdown(f"""
                         <div class="alert-banner success">
                             <span>✓ RECOMMENDATION: APPROVE</span>
                         </div>
-                        <p style="color: #888; font-size: 0.75rem; margin-top: 1rem;">
-                        Strong sustainability indicators. NDVI trend positive. No deforestation detected.
-                        Low climate risk. Purpose aligns with green finance criteria.
-                        </p>
                     """, unsafe_allow_html=True)
-                elif app["sustainability_score"] >= 50:
-                    st.markdown("""
+                elif "CONDITIONAL" in decision:
+                    st.markdown(f"""
                         <div class="alert-banner warning">
                             <span>⚡ RECOMMENDATION: CONDITIONAL</span>
                         </div>
-                        <p style="color: #888; font-size: 0.75rem; margin-top: 1rem;">
-                        Moderate sustainability score. Consider requiring additional documentation
-                        or reduced loan amount. Monitor quarterly.
+                        <p style="color: #888; font-size: 0.75rem; margin-top: 0.5rem;">
+                        Conditional approval means the application meets some but not all criteria. 
+                        Additional documentation or monitoring may be required.
                         </p>
                     """, unsafe_allow_html=True)
                 else:
-                    st.markdown("""
+                    st.markdown(f"""
                         <div class="alert-banner danger">
                             <span>✗ RECOMMENDATION: REJECT</span>
                         </div>
-                        <p style="color: #888; font-size: 0.75rem; margin-top: 1rem;">
-                        Low sustainability score. Potential deforestation detected or declining
-                        vegetation health. Does not meet green finance criteria.
-                        </p>
                     """, unsafe_allow_html=True)
+                
+                # Detailed reasoning
+                st.markdown(f"**Confidence:** {confidence:.0%}")
+                st.markdown(f"**Analysis:**\n\n{reasoning}")
+                
+                # Recommendations
+                if recommendations:
+                    st.markdown("**Recommendations:**")
+                    for rec in recommendations:
+                        st.markdown(f"• {rec}")
+                
+                # Compliance citations
+                if compliance_citations:
+                    st.markdown("**Regulatory Compliance:**")
+                    for citation in compliance_citations:
+                        st.markdown(f"• {citation}")
+                
+                # Metric explanations
+                metric_explanations = ai_data.get("metric_explanations")
+                if metric_explanations:
+                    with st.expander("📊 Detailed Metric Analysis", expanded=False):
+                        if metric_explanations.get("sustainability_explanation"):
+                            st.markdown(f"**Sustainability:** {metric_explanations.get('sustainability_explanation', '')[:200]}...")
+                        if metric_explanations.get("ndvi_explanation"):
+                            st.markdown(f"**NDVI:** {metric_explanations.get('ndvi_explanation', '')[:200]}...")
+                        if metric_explanations.get("actionable_insights"):
+                            st.markdown("**Actionable Insights:**")
+                            for insight in metric_explanations.get("actionable_insights", [])[:3]:
+                                st.markdown(f"• {insight}")
                 
                 st.markdown("</div></div>", unsafe_allow_html=True)
             
@@ -1350,11 +1603,124 @@ def main():
     
     render_function_keys()
     
-    # Command line footer
+    # Command line interface
     st.markdown("""
         <div class="command-line">
             <span class="command-prompt">GCH&gt;</span>
-            <span style="color: #888;">Type command or press F1 for help</span>
+    """, unsafe_allow_html=True)
+    
+    # Command input with autocomplete and Enter key support
+    with st.form("command_form", clear_on_submit=False):
+        col1, col2 = st.columns([10, 1])
+        with col1:
+            command_input = st.text_input(
+                "Command",
+                key="command_input",
+                placeholder="Type command (e.g., /analytics portfolio) - Press Enter to execute, Tab to autocomplete",
+                label_visibility="collapsed"
+            )
+            
+            # Get and show autocomplete suggestions
+            suggestions = []
+            selected_suggestion = None
+            if command_input and len(command_input) > 0:
+                try:
+                    from commands.command_parser import get_command_suggestions
+                    suggestions = get_command_suggestions(command_input)
+                    if suggestions and command_input not in suggestions:
+                        # Store suggestions in session state for Tab key
+                        st.session_state.command_suggestions = suggestions[:5]
+                        # Show clickable suggestions
+                        suggestion_cols = st.columns(min(len(suggestions[:5]), 5))
+                        for i, sug in enumerate(suggestions[:5]):
+                            with suggestion_cols[i]:
+                                if st.button(f"→ {sug.split()[-1] if len(sug.split()) > 1 else sug}", 
+                                           key=f"sug_btn_{i}_{hash(sug)}", 
+                                           use_container_width=True):
+                                    selected_suggestion = sug
+                except Exception as e:
+                    st.session_state.command_suggestions = []
+        
+        with col2:
+            submitted = st.form_submit_button("EXEC", use_container_width=True)
+        
+        # Handle form submission (Enter key or EXEC button)
+        if submitted or selected_suggestion:
+            cmd_to_execute = selected_suggestion if selected_suggestion else command_input
+            if cmd_to_execute:
+                st.session_state.last_command = cmd_to_execute
+                st.session_state.command_result = None
+                # Update the input field if suggestion was selected
+                if selected_suggestion:
+                    st.session_state.command_input = selected_suggestion
+                st.rerun()
+    
+    # Add JavaScript for Tab key autocomplete
+    if "command_suggestions" in st.session_state and st.session_state.command_suggestions:
+        suggestions_json = json.dumps(st.session_state.command_suggestions)
+        st.markdown(f"""
+            <script>
+            (function() {{
+                const input = document.querySelector('input[placeholder*="Type command"]');
+                if (input) {{
+                    const suggestions = {suggestions_json};
+                    let currentIndex = 0;
+                    
+                    input.addEventListener('keydown', function(e) {{
+                        if (e.key === 'Tab' && suggestions.length > 0) {{
+                            e.preventDefault();
+                            input.value = suggestions[currentIndex] || suggestions[0];
+                            currentIndex = (currentIndex + 1) % suggestions.length;
+                            // Trigger Streamlit update
+                            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                            // Small delay then focus back
+                            setTimeout(() => input.focus(), 10);
+                        }}
+                    }});
+                }}
+            }})();
+            </script>
+        """, unsafe_allow_html=True)
+    
+    # Execute command if provided
+    if "last_command" in st.session_state and st.session_state.last_command:
+        try:
+            from commands.command_parser import execute_command
+            result = execute_command(st.session_state.last_command)
+            st.session_state.command_result = result
+            
+            # Display result
+            if result.get("success"):
+                if result.get("type") == "help":
+                    st.info(result.get("data", ""))
+                elif result.get("type") == "export":
+                    st.success(result.get("message", ""))
+                    if result.get("path"):
+                        with open(result["path"], "rb") as f:
+                            st.download_button(
+                                f"Download {result.get('format', '').upper()}",
+                                f.read(),
+                                file_name=result["path"].split("/")[-1],
+                                mime="application/pdf" if result.get("format") == "pdf" else "text/csv"
+                            )
+                else:
+                    # Display analytics results
+                    render_analytics_result(result)
+            else:
+                error_msg = result.get('error', 'Unknown error')
+                st.error(f"Error: {error_msg}")
+                # Show suggestions if available
+                if result.get('suggestions'):
+                    st.info("💡 Did you mean:")
+                    for sug in result.get('suggestions', [])[:3]:
+                        if st.button(sug, key=f"err_sug_{sug}"):
+                            st.session_state.command_input = sug
+                            st.session_state.last_command = sug
+                            st.rerun()
+        except Exception as e:
+            st.error(f"Command execution error: {str(e)}")
+    
+    st.markdown("""
             <span class="blink" style="color: #ff6600;">_</span>
         </div>
     """, unsafe_allow_html=True)

@@ -1,25 +1,20 @@
-# GreenChain Dependencies
-# Core Streamlit
-streamlit>=1.40.0
-folium>=0.15.0
-streamlit-folium>=0.20.0
-plotly>=5.18.0
-python-dotenv>=1.0.0
-
-# PDF Generation
-reportlab>=4.0.0
-
-# HTTP & Data
+boto3>=1.28.0
 requests>=2.31.0
-numpy>=1.24.0
-
-# Satellite Data (STAC)
 pystac-client>=0.7.0
 stackstac>=0.4.0
 xarray>=2023.8.0
 rioxarray>=0.16.0
-
-# AI/LLM
+numpy>=1.24.0
+python-dotenv>=1.0.0
+streamlit>=1.40.0
+folium>=0.15.0
+streamlit-folium>=0.20.0
+reportlab>=4.0.0
+langgraph>=0.2.0
 langchain>=0.3.0
 langchain-google-genai>=2.0.0
 pydantic>=2.0.0
+pinecone-client>=3.0.0
+google-generativeai>=0.3.0
+pandas>=2.0.0
+

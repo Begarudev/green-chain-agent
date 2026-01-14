@@ -1,0 +1,127 @@
+Sustainable Finance Disclosure Regulation (SFDR) - Green Lending Requirements
+
+The SFDR requires financial market participants to disclose how they integrate sustainability risks and consider adverse sustainability impacts in their investment and lending decisions.
+
+ARTICLE 2 - DEFINITIONS
+
+2.1 Sustainable Investment
+An investment in an economic activity that:
+- Contributes to an environmental objective (e.g., climate change mitigation)
+- Does not significantly harm any environmental or social objective
+- Follows good governance practices
+
+2.2 Sustainability Risk
+An environmental, social, or governance (ESG) event that could cause negative impact on the value of an investment or loan.
+
+2.3 Principal Adverse Impact
+Negative effects on sustainability factors resulting from investment or lending decisions.
+
+ARTICLE 3 - TRANSPARENCY OF SUSTAINABILITY RISK POLICIES
+
+Financial institutions must:
+- Publish policies on integration of sustainability risks
+- Describe how sustainability risks are managed
+- Explain due diligence processes
+- Disclose how sustainability risks affect returns
+
+For green lending:
+- Policies on agricultural loan sustainability assessment
+- Risk management for environmental factors (drought, deforestation)
+- Due diligence using satellite data and NDVI analysis
+- Impact of sustainability scores on loan terms
+
+ARTICLE 4 - TRANSPARENCY OF ADVERSE SUSTAINABILITY IMPACTS
+
+Institutions must:
+- Consider principal adverse impacts of investment/lending decisions
+- Disclose how adverse impacts are identified and addressed
+- Report on sustainability indicators
+- Provide information on engagement with investees/borrowers
+
+For agricultural loans:
+- Monitor deforestation and land-use changes
+- Track water usage and pollution risks
+- Assess biodiversity impacts
+- Engage with farmers on sustainable practices
+
+ARTICLE 5 - TRANSPARENCY OF SUSTAINABILITY RISKS IN REMUNERATION
+
+Remuneration policies must:
+- Be consistent with integration of sustainability risks
+- Not encourage excessive risk-taking
+- Align with long-term sustainability objectives
+
+ARTICLE 6 - PRE-CONTRACTUAL DISCLOSURES
+
+Before entering into contracts, institutions must disclose:
+- How sustainability risks are integrated
+- Likely impacts of sustainability risks on returns
+- Whether products consider principal adverse impacts
+- Information on sustainability-related objectives
+
+For loan products:
+- How sustainability assessment affects loan approval
+- Impact of sustainability scores on interest rates
+- Monitoring and compliance requirements
+- Environmental objectives of green lending programs
+
+ARTICLE 7 - WEBSITE DISCLOSURES
+
+Institutions must publish on their websites:
+- Policies on sustainability risk integration
+- Information on principal adverse impacts
+- Description of due diligence processes
+- Sustainability indicators and metrics
+
+ARTICLE 8 - PERIODIC REPORTS
+
+Regular reporting must include:
+- Extent to which products meet sustainability objectives
+- Assessment of sustainability impacts
+- Progress toward sustainability targets
+- Compliance with disclosed policies
+
+For green lending portfolios:
+- Percentage of loans meeting sustainability criteria
+- Aggregate environmental impact (carbon, water, biodiversity)
+- Default rates by sustainability score
+- Compliance with LMA and EU Taxonomy standards
+
+ARTICLE 9 - PRODUCT-LEVEL DISCLOSURES
+
+9.1 Article 8 Products (Promoting Environmental/Social Characteristics)
+- Clear description of environmental or social characteristics
+- Information on how characteristics are met
+- Details on sustainability indicators used
+- Explanation of methodology
+
+9.2 Article 9 Products (Sustainable Investment Objective)
+- Description of sustainable investment objective
+- Information on how objective is achieved
+- Details on sustainability indicators
+- Explanation of methodology and data sources
+
+Green lending products typically fall under Article 8 or Article 9:
+- Article 8: Loans that promote environmental characteristics (sustainable farming)
+- Article 9: Loans with explicit sustainable investment objective (carbon reduction, biodiversity)
+
+ARTICLE 10 - METHODOLOGY AND DATA SOURCES
+
+Disclosures must include:
+- Methodology for assessing sustainability
+- Data sources and their reliability
+- Limitations of data and methodology
+- How data quality is ensured
+
+For satellite-based assessment:
+- NDVI data sources (Sentinel-2, AWS Open Data)
+- Methodology for sustainability scoring
+- Validation and verification processes
+- Limitations and uncertainties
+
+ARTICLE 11 - COMPLIANCE AND VERIFICATION
+
+- Regular audits of sustainability claims
+- Third-party verification where applicable
+- Transparent reporting and disclosure
+- Accountability for misstatements

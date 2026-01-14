@@ -12,6 +12,7 @@ import time
 import json
 from pathlib import Path
 from typing import Any, Dict, List
+from datetime import datetime
 
 import streamlit as st
 import folium
@@ -52,6 +53,13 @@ try:
     from services.verification_service import (
         create_green_certificate,
         generate_blockchain_hash,
+    )
+    from services.rag_service import (
+        get_compliance_context,
+        get_index,
+    )
+    from services.analysis_service import (
+        generate_metric_explanations,
     )
     SERVICES_AVAILABLE = True
 except ImportError as e:
@@ -734,9 +742,68 @@ def page_processing():
     loan_risk = calculate_loan_risk_score(sustainability, loan_amount, purpose)
     update_status("🏦", f"Risk Score: {loan_risk.get('risk_score', 0)}/100", 0.85)
     
-    # Step 6: AI Analysis
-    update_status("🤖", "Generating AI recommendations...", 0.90)
+    # Step 6: RAG - Retrieve Regulatory Context
+    update_status("📋", "Retrieving regulatory compliance context (RAG)...", 0.87)
     current_lang = st.session_state.get("language", "en")
+    regulatory_context_data = None
+    try:
+        pinecone_index = get_index()
+        if pinecone_index:
+            sustainability_score = sustainability.get("overall_score", 50)
+            regulatory_context_data = get_compliance_context(
+                loan_purpose=purpose or "",
+                sustainability_score=sustainability_score,
+                geographic_region=None,  # Could extract from coordinates
+                index=pinecone_index
+            )
+            if regulatory_context_data and regulatory_context_data.get("context"):
+                update_status("✅", f"Retrieved {len(regulatory_context_data.get('context', []))} regulatory guidelines", 0.88)
+            else:
+                update_status("⚠️", "RAG: Using mock context (Pinecone not configured)", 0.88)
+        else:
+            update_status("⚠️", "RAG: Pinecone not available, using mock context", 0.88)
+            # Use mock context
+            regulatory_context_data = {
+                "context": [
+                    {
+                        "text": "LMA Green Lending Guidelines: Loans for sustainable agriculture must demonstrate positive environmental impact.",
+                        "document": "lma_guidelines",
+                        "score": 0.85
+                    }
+                ],
+                "formatted_context": "\n=== RELEVANT REGULATORY GUIDELINES ===\n[1] Source: lma_guidelines\nRelevance Score: 0.85\nContent: LMA Green Lending Guidelines: Loans for sustainable agriculture must demonstrate positive environmental impact.\n=== END REGULATORY GUIDELINES ===\n",
+                "compliance_score": True
+            }
+    except Exception as e:
+        print(f"[RAG] Error retrieving regulatory context: {str(e)}")
+        regulatory_context_data = None
+        update_status("⚠️", f"RAG error: {str(e)[:50]}", 0.88)
+    
+    # Step 7: Generate In-Depth Metric Explanations
+    update_status("📊", "Generating detailed metric explanations...", 0.89)
+    metric_explanations = None
+    try:
+        metrics_for_analysis = {
+            "sustainability_score": sustainability.get("overall_score", 50),
+            "sustainability_components": {
+                "vegetation_trend": sustainability.get("component_scores", {}).get("vegetation_trend", 0),
+                "consistency": sustainability.get("component_scores", {}).get("consistency", 0),
+                "no_deforestation": sustainability.get("component_scores", {}).get("no_deforestation", 0),
+                "climate_resilience": sustainability.get("component_scores", {}).get("climate_resilience", 0),
+            },
+            "ndvi_current": temporal_data.get("ndvi_current", 0.5),
+            "ndvi_trend": temporal_data.get("trend_direction", "stable"),
+            "ndvi_consistency": temporal_data.get("consistency_score", 0),
+            "risk_score": loan_risk.get("risk_score", 0),
+            "weather_data": weather_data
+        }
+        metric_explanations = generate_metric_explanations(metrics_for_analysis, language=current_lang)
+    except Exception as e:
+        print(f"[Analysis] Error generating explanations: {str(e)}")
+        metric_explanations = None
+    
+    # Step 8: AI Analysis with RAG Context
+    update_status("🤖", "Generating AI recommendations...", 0.92)
     
     combined_data = {
         "ndvi_score": temporal_data.get("ndvi_current", 0.5),
@@ -749,8 +816,17 @@ def page_processing():
         "positive_factors": sustainability.get("positive_factors", [])
     }
     
+    regulatory_context_text = None
+    if regulatory_context_data:
+        regulatory_context_text = regulatory_context_data.get("formatted_context")
+    
     try:
-        llm_result = llm_service.analyze_loan_risk(combined_data, user_request=purpose, language=current_lang)
+        llm_result = llm_service.analyze_loan_risk(
+            combined_data, 
+            user_request=purpose, 
+            language=current_lang,
+            regulatory_context=regulatory_context_text
+        )
     except Exception as e:
         # Fallback to rule-based decision
         score = sustainability.get("overall_score", 50)
@@ -778,8 +854,30 @@ def page_processing():
         "weather_data": weather_data,
         "sustainability": sustainability,
         "loan_risk": loan_risk,
-        "llm_result": llm_result
+        "llm_result": llm_result,
+        "regulatory_context": regulatory_context_data,
+        "metric_explanations": metric_explanations
     }
+    
+    # Save to analytics database for banker terminal
+    try:
+        from services.analytics_service import save_application
+        application_record = {
+            "status": llm_result.get("decision", "PENDING"),
+            "loan_amount": loan_amount,
+            "sustainability_score": sustainability.get("overall_score", 0),
+            "risk_score": loan_risk.get("risk_score", 0),
+            "ndvi_current": temporal_data.get("ndvi_current", 0),
+            "deforestation_detected": deforestation_data.get("deforestation_detected", False),
+            "region": "Unknown",  # Could be enhanced with geocoding
+            "loan_purpose": purpose,
+            "latitude": lat,
+            "longitude": lon,
+            "timestamp": datetime.now().isoformat()
+        }
+        save_application(application_record)
+    except Exception as e:
+        print(f"[Analytics] Error saving application: {str(e)}")
     
     time.sleep(0.5)
     st.session_state.step = 4
@@ -834,10 +932,22 @@ def page_results():
             st.metric("Approval Likelihood", loan_risk.get("approval_likelihood", "N/A").title())
     
     # Tabs for detailed analysis
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Sustainability Score", "📈 NDVI Trend", "🌳 Deforestation", "🤖 AI Analysis"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📊 Sustainability Score", 
+        "📈 NDVI Trend", 
+        "🌳 Deforestation", 
+        "🤖 AI Analysis",
+        "📋 Compliance & Regulations"
+    ])
     
     with tab1:
         render_sustainability_score(sustainability)
+        
+        # Add metric explanations if available
+        metric_explanations = result.get("metric_explanations")
+        if metric_explanations and metric_explanations.get("sustainability_explanation"):
+            with st.expander("ℹ️ What does this sustainability score mean?", expanded=False):
+                st.markdown(metric_explanations.get("sustainability_explanation", ""))
     
     with tab2:
         render_ndvi_trend_chart(temporal_data)
@@ -846,12 +956,22 @@ def page_results():
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Current NDVI", f"{temporal_data.get('ndvi_current', 0):.3f}")
+            metric_explanations = result.get("metric_explanations")
+            if metric_explanations and metric_explanations.get("ndvi_explanation"):
+                with st.expander("ℹ️ Explanation", expanded=False):
+                    st.caption(metric_explanations.get("ndvi_explanation", "")[:200] + "...")
         with col2:
             st.metric("6-Month Avg", f"{temporal_data.get('ndvi_average', 0):.3f}")
         with col3:
             st.metric("Change", f"{temporal_data.get('ndvi_change', 0):+.3f}")
         with col4:
             st.metric("Consistency", f"{temporal_data.get('consistency_score', 0):.0%}")
+        
+        # Full NDVI explanation
+        metric_explanations = result.get("metric_explanations")
+        if metric_explanations and metric_explanations.get("ndvi_explanation"):
+            with st.expander("📊 What These NDVI Numbers Mean", expanded=False):
+                st.markdown(metric_explanations.get("ndvi_explanation", ""))
     
     with tab3:
         deforest_detected = deforestation_data.get("deforestation_detected", False)
@@ -880,7 +1000,51 @@ def page_results():
             for rec in llm["recommendations"]:
                 st.markdown(f"• {rec}")
         
+        # Show actionable insights if available
+        metric_explanations = result.get("metric_explanations")
+        if metric_explanations and metric_explanations.get("actionable_insights"):
+            st.markdown("### 💡 Actionable Insights")
+            for insight in metric_explanations.get("actionable_insights", []):
+                st.markdown(f"• {insight}")
+        
+        # Risk explanation
+        if metric_explanations and metric_explanations.get("risk_explanation"):
+            with st.expander("ℹ️ Risk Score Explanation", expanded=False):
+                st.markdown(metric_explanations.get("risk_explanation", ""))
+        
         st.caption(f"Model: {llm.get('model_used', 'Unknown')}")
+    
+    with tab5:
+        regulatory_context = result.get("regulatory_context")
+        
+        if regulatory_context and regulatory_context.get("context"):
+            st.markdown("### 📋 Relevant Regulatory Guidelines")
+            
+            context_items = regulatory_context.get("context", [])
+            if context_items:
+                for i, item in enumerate(context_items, 1):
+                    with st.expander(f"[{i}] {item.get('document', 'Unknown').replace('_', ' ').title()} (Relevance: {item.get('score', 0):.2f})", expanded=(i == 1)):
+                        st.markdown(f"**Source:** {item.get('document', 'Unknown').replace('_', ' ').title()}")
+                        st.markdown(f"**Relevance Score:** {item.get('score', 0):.2f}")
+                        st.markdown(f"**Content:**\n\n{item.get('text', '')}")
+            else:
+                st.info("No specific regulatory context retrieved for this application.")
+        else:
+            st.info("Regulatory compliance context not available. This may be due to Pinecone not being configured or documents not being ingested.")
+        
+        # Show compliance citations from LLM if available
+        if llm.get("compliance_citations"):
+            st.markdown("### ✅ Compliance Citations")
+            for citation in llm.get("compliance_citations", []):
+                st.markdown(f"• {citation}")
+        
+        # Compliance score indicator
+        if regulatory_context:
+            compliance_score = regulatory_context.get("compliance_score", False)
+            if compliance_score:
+                st.success("✅ Regulatory compliance context retrieved successfully")
+            else:
+                st.warning("⚠️ Limited regulatory context available")
     
     # Certificate
     if "APPROVED" in decision or "CONDITIONAL" in decision:

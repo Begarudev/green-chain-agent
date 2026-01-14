@@ -1,0 +1,110 @@
+EU Taxonomy Regulation for Environmentally Sustainable Economic Activities
+
+The EU Taxonomy Regulation establishes criteria for determining whether an economic activity qualifies as environmentally sustainable. This applies to green lending in agriculture.
+
+ARTICLE 3 - ENVIRONMENTAL OBJECTIVES
+
+An economic activity qualifies as environmentally sustainable if it:
+1. Contributes substantially to one or more of the following environmental objectives:
+   - Climate change mitigation
+   - Climate change adaptation
+   - Sustainable use and protection of water and marine resources
+   - Transition to a circular economy
+   - Pollution prevention and control
+   - Protection and restoration of biodiversity and ecosystems
+
+2. Does not significantly harm any of the environmental objectives listed above
+
+3. Is carried out in compliance with minimum safeguards (human rights, labor rights)
+
+ARTICLE 4 - SUBSTANTIAL CONTRIBUTION CRITERIA FOR AGRICULTURE
+
+4.1 Climate Change Mitigation
+- Activities that reduce greenhouse gas emissions
+- Practices that enhance carbon sequestration in soils
+- Transition to low-carbon farming methods
+- Renewable energy use in agricultural operations
+
+4.2 Climate Change Adaptation
+- Implementation of climate-resilient farming practices
+- Use of drought-resistant crop varieties
+- Water-efficient irrigation systems
+- Weather risk management strategies
+
+4.3 Biodiversity Protection
+- Maintenance of natural habitats
+- Protection of endangered species
+- Avoidance of deforestation and land conversion
+- Sustainable land management practices
+
+4.4 Water Resource Management
+- Efficient water use and conservation
+- Prevention of water pollution
+- Protection of water quality
+- Sustainable irrigation practices
+
+ARTICLE 5 - DO NO SIGNIFICANT HARM (DNSH) PRINCIPLE
+
+Economic activities must not:
+- Cause significant harm to climate change mitigation or adaptation
+- Lead to degradation of water or marine resources
+- Increase waste generation or reduce recycling
+- Cause significant pollution
+- Harm biodiversity or ecosystems
+
+For agricultural loans, this means:
+- No deforestation or habitat destruction
+- No excessive use of harmful pesticides or fertilizers
+- No water pollution or over-extraction
+- No soil degradation or erosion
+- No harm to protected species or areas
+
+ARTICLE 6 - MINIMUM SAFEGUARDS
+
+Activities must comply with:
+- OECD Guidelines for Multinational Enterprises
+- UN Guiding Principles on Business and Human Rights
+- International Labor Organization (ILO) conventions
+- Applicable national and international law
+
+ARTICLE 7 - TECHNICAL SCREENING CRITERIA
+
+7.1 Quantitative Thresholds
+- Minimum sustainability performance indicators
+- Measurable environmental impact metrics
+- Verifiable compliance requirements
+- Regular monitoring and reporting
+
+7.2 Verification Methods
+- Satellite-based monitoring (NDVI, land-use change)
+- On-ground assessments and audits
+- Third-party verification where applicable
+- Transparent reporting and disclosure
+
+ARTICLE 8 - DISCLOSURE REQUIREMENTS
+
+Financial institutions must disclose:
+- Proportion of taxonomy-aligned activities
+- Environmental performance metrics
+- Compliance with technical screening criteria
+- Methodology for assessment
+
+For green lending:
+- Percentage of loans meeting taxonomy criteria
+- Aggregate environmental impact
+- Carbon footprint reduction
+- Biodiversity protection measures
+
+ARTICLE 9 - TRANSITIONAL ACTIVITIES
+
+Activities that do not yet meet full taxonomy criteria but:
+- Support transition to sustainable practices
+- Have credible transition plans
+- Show measurable progress over time
+- Do not lock in carbon-intensive infrastructure
+
+This includes:
+- Farms transitioning to organic methods
+- Implementation of sustainable irrigation systems
+- Adoption of climate-resilient practices
+- Gradual reduction of chemical inputs
